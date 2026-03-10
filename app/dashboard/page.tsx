@@ -1,17 +1,33 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { getMultipleStocks, DEFAULT_STOCKS } from '../../lib/stocks'
+import { searchStock } from '../../lib/stocks'
 
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [portfolio, setPortfolio] = useState<any>(null)
-  const [stocks, setStocks] = useState<any[]>([])
   const [trades, setTrades] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStock, setSelectedStock] = useState<any>(null)
   const [buyAmount, setBuyAmount] = useState('')
   const [message, setMessage] = useState('')
+  const [searchTicker, setSearchTicker] = useState('')
+  const [searchResult, setSearchResult] = useState<any>(null)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const [darkMode, setDarkMode] = useState(false)
+
+  const t = {
+    bg: darkMode ? '#0a0a0f' : '#ffffff',
+    card: darkMode ? '#1a1a2e' : '#f5f5f5',
+    border: darkMode ? '#2a2a4a' : '#eeeeee',
+    text: darkMode ? '#e8e8f0' : '#111111',
+    subtext: darkMode ? '#888' : '#666',
+    input: darkMode ? '#111128' : '#ffffff',
+    inputBorder: darkMode ? '#2a2a4a' : '#cccccc',
+    buyCard: darkMode ? '#0d1a2e' : '#f0f8ff',
+    buyBorder: darkMode ? '#1a4a8a' : '#4a90e2',
+  }
 
   useEffect(() => {
     async function load() {
@@ -31,16 +47,30 @@ export default function Dashboard() {
         .select('*')
         .eq('user_id', user.id)
       setTrades(trades || [])
-
-      const stockData = await getMultipleStocks(DEFAULT_STOCKS)
-      setStocks(stockData)
       setLoading(false)
     }
     load()
   }, [])
 
+  async function handleSearch() {
+    if (!searchTicker.trim()) return
+    setSearchLoading(true)
+    setSearchError('')
+    setSearchResult(null)
+    setSelectedStock(null)
+    const result = await searchStock(searchTicker.trim().toUpperCase())
+    if (result.error) {
+      setSearchError(`Could not find "${searchTicker}" — try a valid ticker like AAPL or SHOP`)
+    } else {
+      setSearchResult(result)
+      setSelectedStock(result)
+    }
+    setSearchLoading(false)
+  }
+
   async function handleBuy() {
     if (!selectedStock || !buyAmount) return
+    if (!selectedStock.price || selectedStock.price === 0) return setMessage('Stock price not loaded yet!')
     const dollars = parseFloat(buyAmount)
     if (isNaN(dollars) || dollars <= 0) return setMessage('Enter a valid amount')
     if (dollars > portfolio.cash) return setMessage('Not enough cash!')
@@ -56,9 +86,7 @@ export default function Dashboard() {
       price_at_purchase: selectedStock.price,
     })
 
-    await supabase.from('portfolios')
-      .update({ cash: newCash })
-      .eq('id', user.id)
+    await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
 
     setPortfolio({ ...portfolio, cash: newCash })
     setTrades([...trades, { ticker: selectedStock.ticker, shares, price_at_purchase: selectedStock.price }])
@@ -69,32 +97,28 @@ export default function Dashboard() {
   async function handleSell(ticker: string) {
     const holding = getHolding(ticker)
     if (!holding) return
-    const stock = stocks.find(s => s.ticker === ticker)
-    if (!stock) return
-
-    const value = holding.shares * stock.price
+    const price = selectedStock?.ticker === ticker ? selectedStock.price : holding.avgPrice
+    const value = holding.shares * price
     const newCash = portfolio.cash + value
 
-    await supabase.from('trades')
-      .delete()
-      .eq('user_id', user.id)
-      .eq('ticker', ticker)
-
-    await supabase.from('portfolios')
-      .update({ cash: newCash })
-      .eq('id', user.id)
+    await supabase.from('trades').delete().eq('user_id', user.id).eq('ticker', ticker)
+    await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
 
     setPortfolio({ ...portfolio, cash: newCash })
-    setTrades(trades.filter(t => t.ticker !== ticker))
+    setTrades(trades.filter(tr => tr.ticker !== ticker))
     setMessage(`✅ Sold all ${ticker} for $${value.toFixed(2)}!`)
   }
 
   function getHolding(ticker: string) {
-    const tickerTrades = trades.filter(t => t.ticker === ticker)
+    const tickerTrades = trades.filter(tr => tr.ticker === ticker)
     if (tickerTrades.length === 0) return null
-    const shares = tickerTrades.reduce((sum, t) => sum + t.shares, 0)
-    const avgPrice = tickerTrades.reduce((sum, t) => sum + t.price_at_purchase, 0) / tickerTrades.length
+    const shares = tickerTrades.reduce((sum, tr) => sum + tr.shares, 0)
+    const avgPrice = tickerTrades.reduce((sum, tr) => sum + tr.price_at_purchase, 0) / tickerTrades.length
     return { shares, avgPrice }
+  }
+
+  function getAllHeldTickers() {
+    return [...new Set(trades.map(tr => tr.ticker))]
   }
 
   async function handleLogout() {
@@ -102,29 +126,42 @@ export default function Dashboard() {
     window.location.href = '/'
   }
 
-  if (!user || loading) return <p style={{ fontFamily: 'monospace', padding: 40 }}>Loading stocks... (this takes ~5s)</p>
+  if (!user || loading) return (
+    <p style={{ fontFamily: 'monospace', padding: 40 }}>Loading...</p>
+  )
 
   const portfolioValue = trades.reduce((sum, trade) => {
-    const stock = stocks.find(s => s.ticker === trade.ticker)
-    return sum + (stock ? trade.shares * stock.price : 0)
+    if (selectedStock?.ticker === trade.ticker) {
+      return sum + trade.shares * selectedStock.price
+    }
+    return sum + trade.shares * trade.price_at_purchase
   }, 0)
 
   return (
-    <div style={{ fontFamily: 'monospace', padding: 40, maxWidth: 1200, margin: '0 auto' }}>
+    <div style={{ fontFamily: 'monospace', padding: 40, maxWidth: 1200, margin: '0 auto', background: t.bg, color: t.text, minHeight: '100vh' }}>
+
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-        <h1>📈 Stock Simulator</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <span style={{ color: '#666' }}>{user.email}</span>
-          <button onClick={handleLogout} style={{ padding: '8px 16px', cursor: 'pointer' }}>Logout</button>
+        <h1 style={{ color: t.text }}>📈 Stock Simulator</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ color: t.subtext, fontSize: 13 }}>{user.email}</span>
+          <button onClick={() => setDarkMode(!darkMode)}
+            style={{ padding: '8px 14px', cursor: 'pointer', background: darkMode ? '#fff' : '#111', color: darkMode ? '#111' : '#fff', border: 'none', borderRadius: 4, fontFamily: 'monospace' }}>
+            {darkMode ? '☀️ Light' : '🌙 Dark'}
+          </button>
+          <button onClick={handleLogout}
+            style={{ padding: '8px 14px', cursor: 'pointer', background: 'transparent', border: `1px solid ${t.border}`, color: t.text, borderRadius: 4, fontFamily: 'monospace' }}>
+            Logout
+          </button>
         </div>
       </div>
 
       {message && (
-        <div style={{ background: '#f0fff0', border: '1px solid #ccc', padding: 12, borderRadius: 6, marginBottom: 16 }}>
+        <div style={{ background: darkMode ? '#0d2e0d' : '#f0fff0', border: '1px solid #ccc', padding: 12, borderRadius: 6, marginBottom: 16, color: t.text }}>
           {message}
         </div>
       )}
+
       <button onClick={async () => {
         const newCash = portfolio.cash + 10000
         await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
@@ -136,112 +173,129 @@ export default function Dashboard() {
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
-        <div style={{ background: '#f5f5f5', padding: 20, borderRadius: 8 }}>
-          <p style={{ color: '#666', marginBottom: 4 }}>💰 Cash</p>
-          <p style={{ fontSize: 24, fontWeight: 'bold' }}>${portfolio?.cash?.toFixed(2)}</p>
-        </div>
-        <div style={{ background: '#f5f5f5', padding: 20, borderRadius: 8 }}>
-          <p style={{ color: '#666', marginBottom: 4 }}>📊 Portfolio Value</p>
-          <p style={{ fontSize: 24, fontWeight: 'bold' }}>${portfolioValue.toFixed(2)}</p>
-        </div>
-        <div style={{ background: '#f5f5f5', padding: 20, borderRadius: 8 }}>
-          <p style={{ color: '#666', marginBottom: 4 }}>💼 Total Value</p>
-          <p style={{ fontSize: 24, fontWeight: 'bold' }}>${(portfolio?.cash + portfolioValue).toFixed(2)}</p>
-        </div>
+        {[
+          { label: '💰 Cash', value: `$${portfolio?.cash?.toFixed(2)}` },
+          { label: '📊 Portfolio Value', value: `$${portfolioValue.toFixed(2)}` },
+          { label: '💼 Total Value', value: `$${(portfolio?.cash + portfolioValue).toFixed(2)}` },
+        ].map(({ label, value }) => (
+          <div key={label} style={{ background: t.card, padding: 20, borderRadius: 8, border: `1px solid ${t.border}` }}>
+            <p style={{ color: t.subtext, marginBottom: 4 }}>{label}</p>
+            <p style={{ fontSize: 24, fontWeight: 'bold', color: t.text }}>{value}</p>
+          </div>
+        ))}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
-        {/* Market */}
+
+        {/* Search + Buy */}
         <div>
-          <h2 style={{ marginBottom: 16 }}>📊 Market</h2>
-          {stocks.map(stock => (
-            <div key={stock.ticker}
-              onClick={() => setSelectedStock(stock)}
-              style={{
-                background: selectedStock?.ticker === stock.ticker ? '#e8f4ff' : '#f9f9f9',
-                border: `1px solid ${selectedStock?.ticker === stock.ticker ? '#4a90e2' : '#eee'}`,
-                padding: 16, borderRadius: 8, marginBottom: 8, cursor: 'pointer'
-              }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <h2 style={{ marginBottom: 16, color: t.text }}>🔍 Find a Stock</h2>
+
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            <input
+              type="text"
+              placeholder="Search ticker e.g. AAPL, SHOP, UBER..."
+              value={searchTicker}
+              onChange={e => setSearchTicker(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSearch()}
+              style={{ flex: 1, padding: 10, borderRadius: 4, border: `1px solid ${t.inputBorder}`, fontFamily: 'monospace', background: t.input, color: t.text }}
+            />
+            <button onClick={handleSearch}
+              style={{ padding: '10px 20px', background: '#4a90e2', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 'bold' }}>
+              {searchLoading ? '...' : 'Search'}
+            </button>
+          </div>
+
+          {searchError && (
+            <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 12 }}>{searchError}</p>
+          )}
+
+          {selectedStock && (
+            <div style={{ background: t.buyCard, border: `1px solid ${t.buyBorder}`, padding: 20, borderRadius: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                 <div>
-                  <p style={{ fontWeight: 'bold', fontSize: 18 }}>{stock.ticker}</p>
-                  {getHolding(stock.ticker) && (
-                    <p style={{ fontSize: 12, color: '#4a90e2' }}>
-                      You own {getHolding(stock.ticker)?.shares.toFixed(4)} shares
+                  <h3 style={{ color: t.text, margin: 0 }}>{selectedStock.ticker}</h3>
+                  {getHolding(selectedStock.ticker) && (
+                    <p style={{ fontSize: 12, color: '#4a90e2', marginTop: 4 }}>
+                      You own {getHolding(selectedStock.ticker)?.shares.toFixed(4)} shares
                     </p>
                   )}
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <p style={{ fontWeight: 'bold', fontSize: 18 }}>${stock.price?.toFixed(2)}</p>
-                  <p style={{ color: stock.change >= 0 ? 'green' : 'red', fontSize: 13 }}>
-                    {stock.change >= 0 ? '+' : ''}{stock.change?.toFixed(2)} ({stock.changePct})
-                  </p>
+                  <p style={{ fontSize: 28, fontWeight: 'bold', color: t.text, margin: 0 }}>${selectedStock.price?.toFixed(2)}</p>
                 </div>
               </div>
-            </div>
-          ))}
 
-          {/* Buy Panel */}
-          {selectedStock && (
-            <div style={{ background: '#f0f8ff', border: '1px solid #4a90e2', padding: 20, borderRadius: 8, marginTop: 16 }}>
-              <h3 style={{ marginBottom: 12 }}>Buy {selectedStock.ticker} @ ${selectedStock.price?.toFixed(2)}</h3>
               <input
                 type="number"
                 placeholder="Amount in $ (e.g. 500)"
                 value={buyAmount}
                 onChange={e => setBuyAmount(e.target.value)}
-                style={{ width: '100%', padding: 10, marginBottom: 8, borderRadius: 4, border: '1px solid #ccc', fontFamily: 'monospace' }}
+                style={{ width: '100%', padding: 10, marginBottom: 8, borderRadius: 4, border: `1px solid ${t.inputBorder}`, fontFamily: 'monospace', background: t.input, color: t.text, boxSizing: 'border-box' as const }}
               />
-              {buyAmount && (
-                <p style={{ fontSize: 12, color: '#666', marginBottom: 8 }}>
+              {buyAmount && parseFloat(buyAmount) > 0 && (
+                <p style={{ fontSize: 12, color: t.subtext, marginBottom: 12 }}>
                   ≈ {(parseFloat(buyAmount) / selectedStock.price).toFixed(4)} shares
                 </p>
               )}
               <button onClick={handleBuy}
-                style={{ width: '100%', padding: 12, background: '#4a90e2', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14 }}>
+                style={{ width: '100%', padding: 12, background: '#22c55e', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold' }}>
                 Buy {selectedStock.ticker}
               </button>
               {getHolding(selectedStock.ticker) && (
                 <button onClick={() => handleSell(selectedStock.ticker)}
-                  style={{ width: '100%', padding: 12, background: 'white', color: 'red', border: '1px solid red', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14, marginTop: 8 }}>
+                  style={{ width: '100%', padding: 12, background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14, marginTop: 8 }}>
                   Sell All {selectedStock.ticker}
                 </button>
               )}
+            </div>
+          )}
+
+          {!selectedStock && !searchError && (
+            <div style={{ color: t.subtext, fontSize: 13, marginTop: 8 }}>
+              <p>Try searching: AAPL, TSLA, NVDA, MSFT, SHOP, UBER, SPOT, AMD, SPY</p>
             </div>
           )}
         </div>
 
         {/* Holdings */}
         <div>
-          <h2 style={{ marginBottom: 16 }}>💼 My Holdings</h2>
-          {DEFAULT_STOCKS.filter(t => getHolding(t)).length === 0 ? (
-            <p style={{ color: '#999' }}>No holdings yet — click a stock to buy!</p>
+          <h2 style={{ marginBottom: 16, color: t.text }}>💼 My Holdings</h2>
+          {getAllHeldTickers().length === 0 ? (
+            <p style={{ color: t.subtext }}>No holdings yet — search a stock to buy!</p>
           ) : (
-            DEFAULT_STOCKS.filter(t => getHolding(t)).map(ticker => {
-              const holding = getHolding(ticker)!
-              const stock = stocks.find(s => s.ticker === ticker)
-              const currentValue = holding.shares * (stock?.price || 0)
+            getAllHeldTickers().map(ticker => {
+              const holding = getHolding(ticker)
+              if (!holding) return null
+              const currentPrice = selectedStock?.ticker === ticker ? selectedStock.price : holding.avgPrice
+              const currentValue = holding.shares * currentPrice
               const costBasis = holding.shares * holding.avgPrice
               const gain = currentValue - costBasis
+              const isLive = selectedStock?.ticker === ticker
               return (
-                <div key={ticker} style={{ background: '#f9f9f9', border: '1px solid #eee', padding: 16, borderRadius: 8, marginBottom: 8 }}>
+                <div key={ticker} style={{ background: t.card, border: `1px solid ${t.border}`, padding: 16, borderRadius: 8, marginBottom: 8 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <div>
-                      <p style={{ fontWeight: 'bold', fontSize: 16 }}>{ticker}</p>
-                      <p style={{ fontSize: 12, color: '#666' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <p style={{ fontWeight: 'bold', fontSize: 16, color: t.text }}>{ticker}</p>
+                        {!isLive && <span style={{ fontSize: 10, color: t.subtext, border: `1px solid ${t.border}`, padding: '2px 6px', borderRadius: 3 }}>search to refresh</span>}
+                      </div>
+                      <p style={{ fontSize: 12, color: t.subtext }}>
                         {holding.shares.toFixed(4)} shares @ avg ${holding.avgPrice.toFixed(2)}
                       </p>
-                      <p style={{ fontSize: 12, color: '#666' }}>
-                        Cost basis: ${(holding.shares * holding.avgPrice).toFixed(2)}
-                      </p>
+                      <p style={{ fontSize: 12, color: t.subtext }}>Cost basis: ${costBasis.toFixed(2)}</p>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontWeight: 'bold' }}>Current: ${currentValue.toFixed(2)}</p>
-                      <p style={{ color: gain >= 0 ? 'green' : 'red', fontSize: 13 }}>
-                        {gain >= 0 ? '+' : ''}${gain.toFixed(2)} ({((gain / costBasis) * 100).toFixed(2)}%)
+                      <p style={{ fontWeight: 'bold', color: t.text }}>
+                        {isLive ? `$${currentValue.toFixed(2)}` : '—'}
                       </p>
+                      {isLive && (
+                        <p style={{ color: gain >= 0 ? '#22c55e' : '#ef4444', fontSize: 13 }}>
+                          {gain >= 0 ? '+' : ''}${gain.toFixed(2)} ({((gain / costBasis) * 100).toFixed(2)}%)
+                        </p>
+                      )}
                       <button onClick={() => handleSell(ticker)}
-                        style={{ marginTop: 8, padding: '4px 12px', background: 'white', color: 'red', border: '1px solid red', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+                        style={{ marginTop: 8, padding: '4px 12px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
                         Sell All
                       </button>
                     </div>
