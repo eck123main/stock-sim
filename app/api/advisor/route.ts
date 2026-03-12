@@ -4,11 +4,11 @@ export async function POST(req: NextRequest) {
   try {
     const { message, portfolio } = await req.json()
 
-const apiKey = process.env.ANTHROPIC_API_KEY
-console.log('API KEY:', apiKey ? 'found (' + apiKey.slice(0, 10) + '...)' : 'MISSING')
-if (!apiKey) {
-  return NextResponse.json({ error: 'API key not configured' }, { status: 500 })
-}
+    const apiKey = process.env.ANTHROPIC_API_KEY
+    console.log('API KEY:', apiKey ? 'found' : 'MISSING')
+    if (!apiKey) {
+      return NextResponse.json({ error: 'API key not configured' }, { status: 500 })
+    }
 
     const systemPrompt = `You are a helpful stock market advisor for a paper trading simulator. 
 The user is practicing with virtual money, not real money.
@@ -30,7 +30,7 @@ Give concise, helpful advice. You can comment on their current holdings, suggest
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-haiku-4-5-20251001',
         max_tokens: 500,
         system: systemPrompt,
         messages: [{ role: 'user', content: message }],
@@ -38,7 +38,7 @@ Give concise, helpful advice. You can comment on their current holdings, suggest
     })
 
     const data = await response.json()
-    console.log('ANTHROPIC RESPONSE:', JSON.stringify(data))
+    console.log('RESPONSE:', JSON.stringify(data))
     const text = data.content?.[0]?.text || 'Sorry, I could not generate a response.'
     return NextResponse.json({ reply: text })
   } catch (err) {

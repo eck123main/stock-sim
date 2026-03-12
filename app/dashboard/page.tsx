@@ -7,6 +7,7 @@ export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [portfolio, setPortfolio] = useState<any>(null)
   const [trades, setTrades] = useState<any[]>([])
+  const [tradeHistory, setTradeHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStock, setSelectedStock] = useState<any>(null)
   const [livePrices, setLivePrices] = useState<Record<string, number>>({})
@@ -16,7 +17,7 @@ export default function Dashboard() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [darkMode, setDarkMode] = useState(false)
-  const [tab, setTab] = useState<'market' | 'advisor'>('market')
+  const [tab, setTab] = useState<'market' | 'history' | 'advisor'>('market')
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant', text: string }[]>([
     { role: 'assistant', text: "Hi! I'm your AI stock advisor. Ask me anything about your portfolio, stocks to consider, or investing concepts. Remember — this is a simulator for learning!" }
   ])
@@ -54,6 +55,14 @@ export default function Dashboard() {
         .from('trades').select('*').eq('user_id', user.id)
       const loadedTrades = tradesData || []
       setTrades(loadedTrades)
+
+      const { data: historyData } = await supabase
+        .from('trade_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+      setTradeHistory(historyData || [])
+
       setLoading(false)
 
       const heldTickers = [...new Set(loadedTrades.map((t: any) => t.ticker))]
@@ -98,10 +107,24 @@ export default function Dashboard() {
       company_name: selectedStock.ticker, shares,
       price_at_purchase: selectedStock.price,
     })
+
+    // Log to history
+    const historyEntry = {
+      user_id: user.id,
+      ticker: selectedStock.ticker,
+      action: 'BUY',
+      shares,
+      price: selectedStock.price,
+      total_value: dollars,
+      profit_loss: null,
+    }
+    await supabase.from('trade_history').insert(historyEntry)
+
     await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
 
     setPortfolio({ ...portfolio, cash: newCash })
     setTrades(prev => [...prev, { ticker: selectedStock.ticker, shares, price_at_purchase: selectedStock.price }])
+    setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
     setBuyAmount('')
     setMessage(`✅ Bought ${shares.toFixed(4)} shares of ${selectedStock.ticker}!`)
   }
@@ -111,15 +134,30 @@ export default function Dashboard() {
     if (!holding) return
     const price = livePrices[ticker] || holding.avgPrice
     const value = holding.shares * price
+    const profitLoss = value - (holding.shares * holding.avgPrice)
     const newCash = portfolio.cash + value
 
     await supabase.from('trades').delete().eq('user_id', user.id).eq('ticker', ticker)
+
+    // Log to history
+    const historyEntry = {
+      user_id: user.id,
+      ticker,
+      action: 'SELL',
+      shares: holding.shares,
+      price,
+      total_value: value,
+      profit_loss: profitLoss,
+    }
+    await supabase.from('trade_history').insert(historyEntry)
+
     await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
 
     setPortfolio({ ...portfolio, cash: newCash })
     setTrades(prev => prev.filter(tr => tr.ticker !== ticker))
+    setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
     if (selectedStock?.ticker === ticker) setSelectedStock(null)
-    setMessage(`✅ Sold all ${ticker} for $${value.toFixed(2)}!`)
+    setMessage(`✅ Sold all ${ticker} for $${value.toFixed(2)}! P&L: ${profitLoss >= 0 ? '+' : ''}$${profitLoss.toFixed(2)}`)
   }
 
   async function handleChat() {
@@ -147,13 +185,12 @@ export default function Dashboard() {
 
     try {
       const res = await fetch('/api/advisor', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ message: userMsg, portfolio: portfolioContext }),
-})
-const data = await res.json()
-console.log('ADVISOR RESPONSE:', data)
-setChatMessages(prev => [...prev, { role: 'assistant', text: data.reply || 'Sorry, something went wrong.' }])
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userMsg, portfolio: portfolioContext }),
+      })
+      const data = await res.json()
+      setChatMessages(prev => [...prev, { role: 'assistant', text: data.reply || 'Sorry, something went wrong.' }])
     } catch {
       setChatMessages(prev => [...prev, { role: 'assistant', text: 'Failed to connect to advisor. Try again!' }])
     }
@@ -187,6 +224,14 @@ setChatMessages(prev => [...prev, { role: 'assistant', text: data.reply || 'Sorr
     const holding = getHolding(ticker)
     if (!holding) return sum
     return sum + holding.shares * (livePrices[ticker] || holding.avgPrice)
+  }, 0)
+
+  const totalPnl = getAllHeldTickers().reduce((sum, ticker) => {
+    const holding = getHolding(ticker)
+    if (!holding) return sum
+    const livePrice = livePrices[ticker]
+    if (!livePrice) return sum
+    return sum + (holding.shares * livePrice) - (holding.shares * holding.avgPrice)
   }, 0)
 
   const POPULAR = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'NFLX', 'SHOP', 'UBER', 'AMD', 'COIN', 'SPY', 'QQQ']
@@ -227,22 +272,30 @@ setChatMessages(prev => [...prev, { role: 'assistant', text: data.reply || 'Sorr
         </button>
 
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 32 }}>
-          {[
-            { label: '💰 Cash', value: `$${portfolio?.cash?.toFixed(2)}` },
-            { label: '📊 Portfolio Value', value: `$${portfolioValue.toFixed(2)}` },
-            { label: '💼 Total Value', value: `$${(portfolio?.cash + portfolioValue).toFixed(2)}` },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ background: t.card, padding: 20, borderRadius: 8, border: `1px solid ${t.border}` }}>
-              <p style={{ color: t.subtext, margin: '0 0 4px 0' }}>{label}</p>
-              <p style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>{value}</p>
-            </div>
-          ))}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
+          <div style={{ background: t.card, padding: 20, borderRadius: 8, border: `1px solid ${t.border}` }}>
+            <p style={{ color: t.subtext, margin: '0 0 4px 0' }}>💰 Cash</p>
+            <p style={{ fontSize: 22, fontWeight: 'bold', margin: 0 }}>${portfolio?.cash?.toFixed(2)}</p>
+          </div>
+          <div style={{ background: t.card, padding: 20, borderRadius: 8, border: `1px solid ${t.border}` }}>
+            <p style={{ color: t.subtext, margin: '0 0 4px 0' }}>📊 Portfolio Value</p>
+            <p style={{ fontSize: 22, fontWeight: 'bold', margin: 0 }}>${portfolioValue.toFixed(2)}</p>
+          </div>
+          <div style={{ background: t.card, padding: 20, borderRadius: 8, border: `1px solid ${t.border}` }}>
+            <p style={{ color: t.subtext, margin: '0 0 4px 0' }}>💼 Total Value</p>
+            <p style={{ fontSize: 22, fontWeight: 'bold', margin: 0 }}>${(portfolio?.cash + portfolioValue).toFixed(2)}</p>
+          </div>
+          <div style={{ background: t.card, padding: 20, borderRadius: 8, border: `1px solid ${t.border}` }}>
+            <p style={{ color: t.subtext, margin: '0 0 4px 0' }}>📈 Total P&L</p>
+            <p style={{ fontSize: 22, fontWeight: 'bold', margin: 0, color: totalPnl >= 0 ? '#22c55e' : '#ef4444' }}>
+              {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+            </p>
+          </div>
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: `2px solid ${t.border}` }}>
-          {(['market', 'advisor'] as const).map(tabName => (
+        <div style={{ display: 'flex', marginBottom: 24, borderBottom: `2px solid ${t.border}` }}>
+          {(['market', 'history', 'advisor'] as const).map(tabName => (
             <button key={tabName} onClick={() => setTab(tabName)}
               style={{
                 padding: '10px 24px', cursor: 'pointer', background: 'transparent',
@@ -250,15 +303,13 @@ setChatMessages(prev => [...prev, { role: 'assistant', text: data.reply || 'Sorr
                 marginBottom: -2, color: tab === tabName ? '#4a90e2' : t.subtext,
                 fontFamily: 'monospace', fontSize: 14, fontWeight: tab === tabName ? 'bold' : 'normal'
               }}>
-              {tabName === 'market' ? '📊 Market' : '🤖 AI Advisor'}
+              {tabName === 'market' ? '📊 Market' : tabName === 'history' ? '📋 History' : '🤖 AI Advisor'}
             </button>
           ))}
         </div>
 
         {tab === 'market' && (
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
-
-            {/* Search + Buy */}
             <div>
               <h2 style={{ marginBottom: 16 }}>🔍 Find a Stock</h2>
               <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -328,7 +379,6 @@ setChatMessages(prev => [...prev, { role: 'assistant', text: data.reply || 'Sorr
               )}
             </div>
 
-            {/* Holdings */}
             <div>
               <h2 style={{ marginBottom: 16 }}>💼 My Holdings</h2>
               {getAllHeldTickers().length === 0 ? (
@@ -373,12 +423,75 @@ setChatMessages(prev => [...prev, { role: 'assistant', text: data.reply || 'Sorr
           </div>
         )}
 
+        {tab === 'history' && (
+          <div>
+            <h2 style={{ marginBottom: 16 }}>📋 Trade History</h2>
+            {tradeHistory.length === 0 ? (
+              <p style={{ color: t.subtext }}>No trades yet — buy or sell a stock to see history!</p>
+            ) : (
+              <div>
+                {/* Summary stats */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+                  <div style={{ background: t.card, padding: 16, borderRadius: 8, border: `1px solid ${t.border}` }}>
+                    <p style={{ color: t.subtext, margin: '0 0 4px 0', fontSize: 12 }}>Total Trades</p>
+                    <p style={{ fontSize: 20, fontWeight: 'bold', margin: 0 }}>{tradeHistory.length}</p>
+                  </div>
+                  <div style={{ background: t.card, padding: 16, borderRadius: 8, border: `1px solid ${t.border}` }}>
+                    <p style={{ color: t.subtext, margin: '0 0 4px 0', fontSize: 12 }}>Realised P&L</p>
+                    {(() => {
+                      const realised = tradeHistory
+                        .filter(h => h.action === 'SELL' && h.profit_loss !== null)
+                        .reduce((sum, h) => sum + h.profit_loss, 0)
+                      return <p style={{ fontSize: 20, fontWeight: 'bold', margin: 0, color: realised >= 0 ? '#22c55e' : '#ef4444' }}>
+                        {realised >= 0 ? '+' : ''}${realised.toFixed(2)}
+                      </p>
+                    })()}
+                  </div>
+                  <div style={{ background: t.card, padding: 16, borderRadius: 8, border: `1px solid ${t.border}` }}>
+                    <p style={{ color: t.subtext, margin: '0 0 4px 0', fontSize: 12 }}>Winning Trades</p>
+                    {(() => {
+                      const sells = tradeHistory.filter(h => h.action === 'SELL' && h.profit_loss !== null)
+                      const wins = sells.filter(h => h.profit_loss > 0).length
+                      return <p style={{ fontSize: 20, fontWeight: 'bold', margin: 0 }}>
+                        {wins}/{sells.length}
+                      </p>
+                    })()}
+                  </div>
+                </div>
+
+                {/* Trade log */}
+                <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px 100px 110px 110px', padding: '10px 16px', borderBottom: `1px solid ${t.border}`, color: t.subtext, fontSize: 12 }}>
+                    <span>Date</span>
+                    <span>Ticker</span>
+                    <span>Action</span>
+                    <span>Shares</span>
+                    <span>Price</span>
+                    <span style={{ textAlign: 'right' }}>P&L</span>
+                  </div>
+                  {tradeHistory.map((h, i) => (
+                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px 100px 110px 110px', padding: '12px 16px', borderBottom: i < tradeHistory.length - 1 ? `1px solid ${t.border}` : 'none', fontSize: 13 }}>
+                      <span style={{ color: t.subtext }}>{new Date(h.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                      <span style={{ fontWeight: 'bold' }}>{h.ticker}</span>
+                      <span style={{ color: h.action === 'BUY' ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>{h.action}</span>
+                      <span>{parseFloat(h.shares).toFixed(4)}</span>
+                      <span>${parseFloat(h.price).toFixed(2)}</span>
+                      <span style={{ textAlign: 'right', color: h.profit_loss === null ? t.subtext : h.profit_loss >= 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
+                        {h.profit_loss === null ? '—' : `${h.profit_loss >= 0 ? '+' : ''}$${parseFloat(h.profit_loss).toFixed(2)}`}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {tab === 'advisor' && (
           <div style={{ maxWidth: 700 }}>
             <h2 style={{ marginBottom: 4 }}>🤖 AI Stock Advisor</h2>
             <p style={{ color: t.subtext, fontSize: 12, marginBottom: 16 }}>Powered by Claude · For educational purposes only, not real financial advice</p>
 
-            {/* Chat messages */}
             <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 8, padding: 16, height: 400, overflowY: 'auto', marginBottom: 12 }}>
               {chatMessages.map((msg, i) => (
                 <div key={i} style={{ marginBottom: 16, display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
@@ -403,7 +516,6 @@ setChatMessages(prev => [...prev, { role: 'assistant', text: data.reply || 'Sorr
               <div ref={chatEndRef} />
             </div>
 
-            {/* Suggested questions */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
               {['How is my portfolio doing?', 'What should I buy next?', 'Explain diversification', 'Am I taking too much risk?'].map(q => (
                 <button key={q} onClick={() => setChatInput(q)}
@@ -413,7 +525,6 @@ setChatMessages(prev => [...prev, { role: 'assistant', text: data.reply || 'Sorr
               ))}
             </div>
 
-            {/* Input */}
             <div style={{ display: 'flex', gap: 8 }}>
               <input type="text" placeholder="Ask about your portfolio or stocks..."
                 value={chatInput} onChange={e => setChatInput(e.target.value)}
