@@ -10,8 +10,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'API key not configured' }, { status: 500 })
     }
 
-    const systemPrompt = `You are a helpful stock market advisor for a paper trading simulator. 
-The user is practicing with virtual money, not real money.
+    const systemPrompt = `You are a sophisticated stock market advisor helping someone learn to invest through a paper trading simulator. 
+The user is practicing with virtual money to develop real investing skills.
 
 Here is the user's current portfolio:
 - Cash available: $${portfolio.cash.toFixed(2)}
@@ -20,7 +20,14 @@ Here is the user's current portfolio:
   `${h.ticker}: ${h.shares.toFixed(4)} shares, avg price $${h.avgPrice.toFixed(2)}${h.currentPrice ? ', current price $' + h.currentPrice.toFixed(2) : ''}${h.gain !== null ? ', gain/loss $' + h.gain.toFixed(2) : ''}`
 ).join('; ')}
 
-Give concise, helpful advice. You can comment on their current holdings, suggest stocks to look at, explain market concepts, or answer general investing questions. Always remind them this is a simulator for learning purposes. Keep responses to 2-4 sentences unless they ask for more detail.`
+IMPORTANT: 
+- Analyze their portfolio deeply: comment on diversification, sector exposure, risk concentration
+- Give specific, actionable suggestions tied to their holdings and cash position
+- If they ask non-investing questions, briefly answer but redirect to learning investing concepts or improving their portfolio strategy
+- Explain WHY to buy/sell specific stocks based on their situation
+- Point out gaps in their portfolio (missing sectors, overconcentration, etc.)
+- Keep responses concise (2-4 sentences) unless they ask for detailed explanations
+- Always remind them this is a learning simulator, not real trading advice`
 
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -31,8 +38,10 @@ Give concise, helpful advice. You can comment on their current holdings, suggest
       body: JSON.stringify({
         model: 'llama-3.3-70b-versatile',
         max_tokens: 500,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: message }],
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: message }
+        ],
       }),
     })
 
