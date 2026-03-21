@@ -55,6 +55,7 @@ export default function Dashboard() {
   const [tab, setTab] = useState<'market' | 'history' | 'advisor'>('market')
   const [showDepositModal, setShowDepositModal] = useState(false)
   const [depositAmount, setDepositAmount] = useState('')
+  const [refreshingPrices, setRefreshingPrices] = useState(false)
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant', text: string }[]>([
     { role: 'assistant', text: "Hi! I'm your AI stock advisor. Ask me anything about your portfolio, stocks to consider, or investing concepts. Remember — this is a simulator for learning!" }
   ])
@@ -110,14 +111,12 @@ export default function Dashboard() {
 
       setLoading(false)
 
-      const heldTickers = [...new Set(loadedTrades.map((t: any) => t.ticker))]
-      const prices: Record<string, number> = {}
-      for (const ticker of heldTickers) {
-        const result = await searchStock(ticker as string)
-        if (!result.error && result.price) prices[ticker as string] = result.price
-        await new Promise(r => setTimeout(r, 500))
+      // Load cached prices from localStorage
+      const cachedPrices = localStorage.getItem('stock_prices')
+      const cachedTimestamp = localStorage.getItem('stock_prices_timestamp')
+      if (cachedPrices) {
+        setLivePrices(JSON.parse(cachedPrices))
       }
-      setLivePrices(prices)
     }
     load()
   }, [])
@@ -135,6 +134,29 @@ export default function Dashboard() {
       setLivePrices(prev => ({ ...prev, [result.ticker]: result.price }))
     }
     setSearchLoading(false)
+  }
+
+  async function handleRefreshPrices() {
+    setRefreshingPrices(true)
+    setMessage('')
+
+    const heldTickers = [...new Set(trades.map((t: any) => t.ticker))]
+    const prices: Record<string, number> = {}
+
+    for (const ticker of heldTickers) {
+      const result = await searchStock(ticker as string)
+      if (!result.error && result.price) {
+        prices[ticker as string] = result.price
+      }
+      await new Promise(r => setTimeout(r, 500))
+    }
+
+    setLivePrices(prices)
+    // Save to localStorage with timestamp
+    localStorage.setItem('stock_prices', JSON.stringify(prices))
+    localStorage.setItem('stock_prices_timestamp', Date.now().toString())
+    setRefreshingPrices(false)
+    setMessage('✅ Prices refreshed successfully!')
   }
 
   async function handleBuy() {
@@ -462,7 +484,7 @@ export default function Dashboard() {
               </div>
 
               <div style={{ display: 'flex', gap: 12 }}>
-                <button onClick={handleDeposit} style={{
+                <button onClick={() => handleDeposit()} style={{
                   flex: 1,
                   padding: '14px',
                   background: t.accentGradient,
@@ -755,7 +777,28 @@ export default function Dashboard() {
             </div>
 
             <div>
-              <h2 style={{ marginBottom: 24, fontSize: 24, fontWeight: 700 }}>💼 My Holdings</h2>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+                <h2 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>💼 My Holdings</h2>
+                {getAllHeldTickers().length > 0 && (
+                  <button
+                    onClick={handleRefreshPrices}
+                    disabled={refreshingPrices}
+                    style={{
+                      padding: '12px 20px',
+                      background: refreshingPrices ? t.inputBorder : t.accentGradient,
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 10,
+                      fontSize: 15,
+                      fontWeight: 600,
+                      cursor: refreshingPrices ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: refreshingPrices ? 'none' : '0 2px 10px rgba(102, 126, 234, 0.3)'
+                    }}>
+                    {refreshingPrices ? '🔄 Refreshing...' : '🔄 Refresh Prices'}
+                  </button>
+                )}
+              </div>
               {getAllHeldTickers().length === 0 ? (
                 <div style={{
                   padding: 48,
