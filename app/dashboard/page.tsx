@@ -26,15 +26,17 @@ export default function Dashboard() {
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const t = {
-    bg: darkMode ? '#0a0a0f' : '#f8f9fa',
-    card: darkMode ? '#1a1a2e' : '#ffffff',
-    border: darkMode ? '#2a2a4a' : '#e0e0e0',
-    text: darkMode ? '#e8e8f0' : '#111111',
-    subtext: darkMode ? '#888' : '#666',
-    input: darkMode ? '#111128' : '#ffffff',
-    inputBorder: darkMode ? '#2a2a4a' : '#cccccc',
-    buyCard: darkMode ? '#0d1a2e' : '#f0f8ff',
-    buyBorder: darkMode ? '#1a4a8a' : '#4a90e2',
+    bg: darkMode ? '#0f0f1e' : 'linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%)',
+    card: darkMode ? 'linear-gradient(145deg, #1a1a2e 0%, #16213e 100%)' : '#ffffff',
+    border: darkMode ? '#2a2a4a' : '#e0e7ed',
+    text: darkMode ? '#e8e8f0' : '#1a202c',
+    subtext: darkMode ? '#9ca3af' : '#64748b',
+    input: darkMode ? '#1a1a2e' : '#ffffff',
+    inputBorder: darkMode ? '#374151' : '#cbd5e1',
+    buyCard: darkMode ? 'linear-gradient(145deg, #1e3a5f 0%, #0f2847 100%)' : 'linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%)',
+    buyBorder: darkMode ? '#3b82f6' : '#60a5fa',
+    accent: '#667eea',
+    accentGradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
   }
 
   useEffect(() => {
@@ -215,8 +217,11 @@ export default function Dashboard() {
   }
 
   if (!user || loading) return (
-    <div style={{ background: t.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <p style={{ fontFamily: 'monospace', color: t.text }}>Loading...</p>
+    <div style={{ background: darkMode ? '#0f0f1e' : '#f5f7fa', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 56, marginBottom: 20 }}>📈</div>
+        <p style={{ fontFamily: 'monospace', color: darkMode ? '#9ca3af' : '#64748b', fontSize: 18 }}>Loading your portfolio...</p>
+      </div>
     </div>
   )
 
@@ -237,27 +242,74 @@ export default function Dashboard() {
   const POPULAR = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'NFLX', 'SHOP', 'UBER', 'AMD', 'COIN', 'SPY', 'QQQ']
 
   return (
-    <div style={{ background: t.bg, minHeight: '100vh', color: t.text }}>
-      <div style={{ fontFamily: 'monospace', padding: '32px 48px', maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ background: darkMode ? '#0f0f1e' : '#f5f7fa', minHeight: '100vh', color: t.text }}>
+      <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', padding: '48px 60px', maxWidth: 1400, margin: '0 auto' }}>
 
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
-          <h1 style={{ margin: 0 }}>📈 Stock Simulator</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ color: t.subtext, fontSize: 13 }}>{user.email}</span>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 48,
+          padding: '28px 36px',
+          background: t.card,
+          borderRadius: 20,
+          boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)',
+          border: `1px solid ${t.border}`
+        }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 32, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 14 }}>
+              <span>📈</span>
+              <span>Stock Simulator</span>
+            </h1>
+            <p style={{ margin: '6px 0 0 0', color: t.subtext, fontSize: 16 }}>{user.email}</p>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <button onClick={() => setDarkMode(!darkMode)}
-              style={{ padding: '8px 14px', cursor: 'pointer', background: darkMode ? '#fff' : '#111', color: darkMode ? '#111' : '#fff', border: 'none', borderRadius: 4, fontFamily: 'monospace' }}>
+              style={{
+                padding: '12px 22px',
+                cursor: 'pointer',
+                background: darkMode ? '#fff' : '#1a202c',
+                color: darkMode ? '#1a202c' : '#fff',
+                border: 'none',
+                borderRadius: 12,
+                fontFamily: 'inherit',
+                fontSize: 15,
+                fontWeight: 500,
+                transition: 'all 0.2s',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+              }}>
               {darkMode ? '☀️ Light' : '🌙 Dark'}
             </button>
             <button onClick={handleLogout}
-              style={{ padding: '8px 14px', cursor: 'pointer', background: 'transparent', border: `1px solid ${t.border}`, color: t.text, borderRadius: 4, fontFamily: 'monospace' }}>
+              style={{
+                padding: '12px 22px',
+                cursor: 'pointer',
+                background: 'transparent',
+                border: `2px solid ${t.border}`,
+                color: t.text,
+                borderRadius: 12,
+                fontFamily: 'inherit',
+                fontSize: 15,
+                fontWeight: 500,
+                transition: 'all 0.2s'
+              }}>
               Logout
             </button>
           </div>
         </div>
 
         {message && (
-          <div style={{ background: darkMode ? '#0d2e0d' : '#f0fff0', border: '1px solid #ccc', padding: 12, borderRadius: 6, marginBottom: 16 }}>
+          <div style={{
+            background: darkMode ? 'rgba(16, 185, 129, 0.1)' : '#ecfdf5',
+            border: `2px solid ${darkMode ? '#10b981' : '#6ee7b7'}`,
+            padding: '16px 24px',
+            borderRadius: 14,
+            marginBottom: 28,
+            fontSize: 16,
+            color: darkMode ? '#6ee7b7' : '#047857',
+            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.1)'
+          }}>
             {message}
           </div>
         )}
@@ -267,41 +319,108 @@ export default function Dashboard() {
           await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
           setPortfolio({ ...portfolio, cash: newCash })
           setMessage('💸 Added $10,000!')
-        }} style={{ marginBottom: 24, padding: '10px 20px', background: '#22c55e', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14 }}>
-          💸 Give me $10,000
+        }} style={{
+          marginBottom: 40,
+          padding: '14px 28px',
+          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+          color: 'white',
+          border: 'none',
+          borderRadius: 12,
+          cursor: 'pointer',
+          fontFamily: 'inherit',
+          fontSize: 16,
+          fontWeight: 600,
+          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+          transition: 'all 0.2s'
+        }}>
+          💸 Add $10,000
         </button>
 
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
-          <div style={{ background: t.card, padding: 20, borderRadius: 8, border: `1px solid ${t.border}` }}>
-            <p style={{ color: t.subtext, margin: '0 0 4px 0' }}>💰 Cash</p>
-            <p style={{ fontSize: 22, fontWeight: 'bold', margin: 0 }}>${portfolio?.cash?.toFixed(2)}</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 24, marginBottom: 48 }}>
+          <div style={{
+            background: t.card,
+            padding: 28,
+            borderRadius: 18,
+            border: `1px solid ${t.border}`,
+            boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)',
+            transition: 'transform 0.2s',
+          }}>
+            <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 15, fontWeight: 500 }}>💰 Cash Available</p>
+            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${portfolio?.cash?.toFixed(2)}</p>
           </div>
-          <div style={{ background: t.card, padding: 20, borderRadius: 8, border: `1px solid ${t.border}` }}>
-            <p style={{ color: t.subtext, margin: '0 0 4px 0' }}>📊 Portfolio Value</p>
-            <p style={{ fontSize: 22, fontWeight: 'bold', margin: 0 }}>${portfolioValue.toFixed(2)}</p>
+          <div style={{
+            background: t.card,
+            padding: 28,
+            borderRadius: 18,
+            border: `1px solid ${t.border}`,
+            boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)',
+            transition: 'transform 0.2s',
+          }}>
+            <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 15, fontWeight: 500 }}>📊 Portfolio Value</p>
+            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${portfolioValue.toFixed(2)}</p>
           </div>
-          <div style={{ background: t.card, padding: 20, borderRadius: 8, border: `1px solid ${t.border}` }}>
-            <p style={{ color: t.subtext, margin: '0 0 4px 0' }}>💼 Total Value</p>
-            <p style={{ fontSize: 22, fontWeight: 'bold', margin: 0 }}>${(portfolio?.cash + portfolioValue).toFixed(2)}</p>
+          <div style={{
+            background: t.card,
+            padding: 28,
+            borderRadius: 18,
+            border: `1px solid ${t.border}`,
+            boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)',
+            transition: 'transform 0.2s',
+          }}>
+            <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 15, fontWeight: 500 }}>💼 Total Value</p>
+            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${(portfolio?.cash + portfolioValue).toFixed(2)}</p>
           </div>
-          <div style={{ background: t.card, padding: 20, borderRadius: 8, border: `1px solid ${t.border}` }}>
-            <p style={{ color: t.subtext, margin: '0 0 4px 0' }}>📈 Total P&L</p>
-            <p style={{ fontSize: 22, fontWeight: 'bold', margin: 0, color: totalPnl >= 0 ? '#22c55e' : '#ef4444' }}>
+          <div style={{
+            background: totalPnl >= 0
+              ? (darkMode ? 'linear-gradient(145deg, #065f46 0%, #064e3b 100%)' : 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)')
+              : (darkMode ? 'linear-gradient(145deg, #991b1b 0%, #7f1d1d 100%)' : 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)'),
+            padding: 28,
+            borderRadius: 18,
+            border: `2px solid ${totalPnl >= 0 ? (darkMode ? '#10b981' : '#6ee7b7') : (darkMode ? '#ef4444' : '#fca5a5')}`,
+            boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.12)',
+            transition: 'transform 0.2s',
+          }}>
+            <p style={{ color: totalPnl >= 0 ? (darkMode ? '#d1fae5' : '#065f46') : (darkMode ? '#fecaca' : '#991b1b'), margin: '0 0 10px 0', fontSize: 15, fontWeight: 600 }}>
+              📈 Total P&L
+            </p>
+            <p style={{
+              fontSize: 32,
+              fontWeight: 700,
+              margin: 0,
+              color: totalPnl >= 0 ? (darkMode ? '#6ee7b7' : '#059669') : (darkMode ? '#fca5a5' : '#dc2626')
+            }}>
               {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
             </p>
           </div>
         </div>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', marginBottom: 24, borderBottom: `2px solid ${t.border}` }}>
+        <div style={{
+          display: 'flex',
+          marginBottom: 36,
+          background: t.card,
+          padding: 8,
+          borderRadius: 14,
+          border: `1px solid ${t.border}`,
+          gap: 8,
+          boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 4px rgba(0, 0, 0, 0.04)'
+        }}>
           {(['market', 'history', 'advisor'] as const).map(tabName => (
             <button key={tabName} onClick={() => setTab(tabName)}
               style={{
-                padding: '10px 24px', cursor: 'pointer', background: 'transparent',
-                border: 'none', borderBottom: tab === tabName ? '2px solid #4a90e2' : '2px solid transparent',
-                marginBottom: -2, color: tab === tabName ? '#4a90e2' : t.subtext,
-                fontFamily: 'monospace', fontSize: 14, fontWeight: tab === tabName ? 'bold' : 'normal'
+                flex: 1,
+                padding: '14px 24px',
+                cursor: 'pointer',
+                background: tab === tabName ? t.accentGradient : 'transparent',
+                border: 'none',
+                borderRadius: 10,
+                color: tab === tabName ? '#ffffff' : t.subtext,
+                fontFamily: 'inherit',
+                fontSize: 16,
+                fontWeight: tab === tabName ? 600 : 500,
+                transition: 'all 0.2s',
+                boxShadow: tab === tabName ? '0 2px 8px rgba(102, 126, 234, 0.3)' : 'none'
               }}>
               {tabName === 'market' ? '📊 Market' : tabName === 'history' ? '📋 History' : '🤖 AI Advisor'}
             </button>
@@ -309,21 +428,43 @@ export default function Dashboard() {
         </div>
 
         {tab === 'market' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 32 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 36 }}>
             <div>
-              <h2 style={{ marginBottom: 16 }}>🔍 Find a Stock</h2>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                <input type="text" placeholder="Search ticker e.g. AAPL, SHOP, UBER..."
+              <h2 style={{ marginBottom: 24, fontSize: 24, fontWeight: 700 }}>🔍 Find a Stock</h2>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+                <input type="text" placeholder="Search ticker (e.g., AAPL, SHOP)..."
                   value={searchTicker} onChange={e => setSearchTicker(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSearch()}
-                  style={{ flex: 1, padding: 10, borderRadius: 4, border: `1px solid ${t.inputBorder}`, fontFamily: 'monospace', background: t.input, color: t.text }} />
+                  style={{
+                    flex: 1,
+                    padding: '14px 18px',
+                    borderRadius: 12,
+                    border: `2px solid ${t.inputBorder}`,
+                    fontFamily: 'inherit',
+                    background: t.input,
+                    color: t.text,
+                    fontSize: 16,
+                    transition: 'all 0.2s'
+                  }} />
                 <button onClick={handleSearch}
-                  style={{ padding: '10px 20px', background: '#4a90e2', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                  style={{
+                    padding: '14px 28px',
+                    background: t.accentGradient,
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: 12,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontWeight: 600,
+                    fontSize: 16,
+                    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
+                    transition: 'all 0.2s'
+                  }}>
                   {searchLoading ? '...' : 'Search'}
                 </button>
               </div>
 
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
                 {POPULAR.map(ticker => (
                   <button key={ticker} onClick={async () => {
                     setSearchTicker(ticker)
@@ -336,42 +477,111 @@ export default function Dashboard() {
                       setLivePrices(prev => ({ ...prev, [result.ticker]: result.price }))
                     }
                     setSearchLoading(false)
-                  }} style={{ padding: '4px 10px', background: t.card, border: `1px solid ${t.border}`, borderRadius: 20, cursor: 'pointer', fontFamily: 'monospace', fontSize: 12, color: t.text }}>
+                  }} style={{
+                    padding: '8px 16px',
+                    background: t.card,
+                    border: `2px solid ${t.border}`,
+                    borderRadius: 20,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    color: t.text,
+                    transition: 'all 0.2s',
+                    boxShadow: darkMode ? '0 1px 4px rgba(0, 0, 0, 0.2)' : 'none'
+                  }}>
                     {ticker}
                   </button>
                 ))}
               </div>
 
-              {searchError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 12 }}>{searchError}</p>}
+              {searchError && (
+                <div style={{
+                  color: '#ef4444',
+                  fontSize: 15,
+                  marginBottom: 20,
+                  padding: '12px 16px',
+                  background: darkMode ? 'rgba(239, 68, 68, 0.1)' : '#fee',
+                  border: `1px solid ${darkMode ? '#dc2626' : '#fcc'}`,
+                  borderRadius: 10
+                }}>
+                  {searchError}
+                </div>
+              )}
 
               {selectedStock && (
-                <div style={{ background: t.buyCard, border: `1px solid ${t.buyBorder}`, padding: 20, borderRadius: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div style={{
+                  background: t.buyCard,
+                  border: `2px solid ${t.buyBorder}`,
+                  padding: 28,
+                  borderRadius: 18,
+                  boxShadow: darkMode ? '0 8px 24px rgba(0, 0, 0, 0.4)' : '0 4px 16px rgba(59, 130, 246, 0.15)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
                     <div>
-                      <h3 style={{ margin: 0 }}>{selectedStock.ticker}</h3>
+                      <h3 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>{selectedStock.ticker}</h3>
                       {getHolding(selectedStock.ticker) && (
-                        <p style={{ fontSize: 12, color: '#4a90e2', margin: '4px 0 0 0' }}>
+                        <p style={{ fontSize: 15, color: darkMode ? '#60a5fa' : '#3b82f6', margin: '8px 0 0 0', fontWeight: 500 }}>
                           You own {getHolding(selectedStock.ticker)?.shares.toFixed(4)} shares
                         </p>
                       )}
                     </div>
-                    <p style={{ fontSize: 28, fontWeight: 'bold', margin: 0 }}>${selectedStock.price?.toFixed(2)}</p>
+                    <p style={{ fontSize: 36, fontWeight: 700, margin: 0, color: darkMode ? '#60a5fa' : '#3b82f6' }}>
+                      ${selectedStock.price?.toFixed(2)}
+                    </p>
                   </div>
-                  <input type="number" placeholder="Amount in $ (e.g. 500)" value={buyAmount}
+                  <input type="number" placeholder="Amount in $ (e.g., 500)" value={buyAmount}
                     onChange={e => setBuyAmount(e.target.value)}
-                    style={{ width: '100%', padding: 10, marginBottom: 8, borderRadius: 4, border: `1px solid ${t.inputBorder}`, fontFamily: 'monospace', background: t.input, color: t.text, boxSizing: 'border-box' as const }} />
+                    style={{
+                      width: '100%',
+                      padding: '14px 18px',
+                      marginBottom: 12,
+                      borderRadius: 12,
+                      border: `2px solid ${t.inputBorder}`,
+                      fontFamily: 'inherit',
+                      background: t.input,
+                      color: t.text,
+                      boxSizing: 'border-box' as const,
+                      fontSize: 16
+                    }} />
                   {buyAmount && parseFloat(buyAmount) > 0 && (
-                    <p style={{ fontSize: 12, color: t.subtext, marginBottom: 12 }}>
+                    <p style={{ fontSize: 15, color: t.subtext, marginBottom: 16, fontWeight: 500 }}>
                       ≈ {(parseFloat(buyAmount) / selectedStock.price).toFixed(4)} shares
                     </p>
                   )}
                   <button onClick={handleBuy}
-                    style={{ width: '100%', padding: 12, background: '#22c55e', color: 'white', border: 'none', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14, fontWeight: 'bold' }}>
+                    style={{
+                      width: '100%',
+                      padding: '16px',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      fontSize: 16,
+                      fontWeight: 600,
+                      boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+                      transition: 'all 0.2s'
+                    }}>
                     Buy {selectedStock.ticker}
                   </button>
                   {getHolding(selectedStock.ticker) && (
                     <button onClick={() => handleSell(selectedStock.ticker)}
-                      style={{ width: '100%', padding: 12, background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 14, marginTop: 8 }}>
+                      style={{
+                        width: '100%',
+                        padding: '16px',
+                        background: 'transparent',
+                        color: '#ef4444',
+                        border: '2px solid #ef4444',
+                        borderRadius: 12,
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: 16,
+                        fontWeight: 600,
+                        marginTop: 12,
+                        transition: 'all 0.2s'
+                      }}>
                       Sell All {selectedStock.ticker}
                     </button>
                   )}
@@ -380,9 +590,20 @@ export default function Dashboard() {
             </div>
 
             <div>
-              <h2 style={{ marginBottom: 16 }}>💼 My Holdings</h2>
+              <h2 style={{ marginBottom: 24, fontSize: 24, fontWeight: 700 }}>💼 My Holdings</h2>
               {getAllHeldTickers().length === 0 ? (
-                <p style={{ color: t.subtext }}>No holdings yet — search a stock to buy!</p>
+                <div style={{
+                  padding: 48,
+                  textAlign: 'center',
+                  background: t.card,
+                  borderRadius: 18,
+                  border: `2px dashed ${t.border}`,
+                  color: t.subtext
+                }}>
+                  <div style={{ fontSize: 56, marginBottom: 16 }}>📊</div>
+                  <p style={{ margin: 0, fontSize: 17, fontWeight: 500 }}>No holdings yet</p>
+                  <p style={{ margin: '6px 0 0 0', fontSize: 15 }}>Search a stock to start!</p>
+                </div>
               ) : getAllHeldTickers().map(ticker => {
                 const holding = getHolding(ticker)
                 if (!holding) return null
@@ -390,28 +611,94 @@ export default function Dashboard() {
                 const currentValue = holding.shares * (livePrice || holding.avgPrice)
                 const costBasis = holding.shares * holding.avgPrice
                 const gain = livePrice ? currentValue - costBasis : null
+                const gainPercent = gain ? (gain / costBasis) * 100 : 0
                 return (
-                  <div key={ticker} style={{ background: t.card, border: `1px solid ${t.border}`, padding: 16, borderRadius: 8, marginBottom: 8 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <p style={{ fontWeight: 'bold', fontSize: 16, margin: 0 }}>{ticker}</p>
-                          {livePrice ? <span style={{ fontSize: 10, color: '#22c55e' }}>● live</span>
-                            : <span style={{ fontSize: 10, color: t.subtext }}>loading...</span>}
+                  <div key={ticker} style={{
+                    background: t.card,
+                    border: `1px solid ${t.border}`,
+                    padding: 24,
+                    borderRadius: 18,
+                    marginBottom: 16,
+                    boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 6px rgba(0, 0, 0, 0.04)',
+                    transition: 'all 0.2s'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                          <p style={{ fontWeight: 700, fontSize: 20, margin: 0 }}>{ticker}</p>
+                          {livePrice ? (
+                            <span style={{
+                              fontSize: 12,
+                              color: '#10b981',
+                              background: darkMode ? 'rgba(16, 185, 129, 0.1)' : '#d1fae5',
+                              padding: '3px 10px',
+                              borderRadius: 12,
+                              fontWeight: 600
+                            }}>● LIVE</span>
+                          ) : (
+                            <span style={{
+                              fontSize: 12,
+                              color: t.subtext,
+                              background: darkMode ? 'rgba(156, 163, 175, 0.1)' : '#f1f5f9',
+                              padding: '3px 10px',
+                              borderRadius: 12
+                            }}>loading...</span>
+                          )}
                         </div>
-                        <p style={{ fontSize: 12, color: t.subtext, margin: '4px 0 0 0' }}>{holding.shares.toFixed(4)} shares @ avg ${holding.avgPrice.toFixed(2)}</p>
-                        <p style={{ fontSize: 12, color: t.subtext, margin: '2px 0 0 0' }}>Cost basis: ${costBasis.toFixed(2)}</p>
-                        {livePrice && <p style={{ fontSize: 12, color: t.subtext, margin: '2px 0 0 0' }}>Current price: ${livePrice.toFixed(2)}</p>}
-                      </div>
-                      <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontWeight: 'bold', margin: 0 }}>${currentValue.toFixed(2)}</p>
-                        {gain !== null && (
-                          <p style={{ color: gain >= 0 ? '#22c55e' : '#ef4444', fontSize: 13, margin: '2px 0 0 0' }}>
-                            {gain >= 0 ? '+' : ''}${gain.toFixed(2)} ({((gain / costBasis) * 100).toFixed(2)}%)
+                        <p style={{ fontSize: 14, color: t.subtext, margin: '0 0 5px 0' }}>
+                          {holding.shares.toFixed(4)} shares @ avg ${holding.avgPrice.toFixed(2)}
+                        </p>
+                        <p style={{ fontSize: 14, color: t.subtext, margin: '0 0 5px 0' }}>
+                          Cost: ${costBasis.toFixed(2)}
+                        </p>
+                        {livePrice && (
+                          <p style={{ fontSize: 14, color: t.subtext, margin: 0 }}>
+                            Current: ${livePrice.toFixed(2)}
                           </p>
                         )}
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ fontWeight: 700, margin: '0 0 10px 0', fontSize: 22 }}>${currentValue.toFixed(2)}</p>
+                        {gain !== null && (
+                          <div style={{
+                            padding: '8px 14px',
+                            borderRadius: 10,
+                            background: gain >= 0
+                              ? (darkMode ? 'rgba(16, 185, 129, 0.15)' : '#d1fae5')
+                              : (darkMode ? 'rgba(239, 68, 68, 0.15)' : '#fee2e2'),
+                            marginBottom: 12
+                          }}>
+                            <p style={{
+                              color: gain >= 0 ? '#10b981' : '#ef4444',
+                              fontSize: 16,
+                              margin: 0,
+                              fontWeight: 700
+                            }}>
+                              {gain >= 0 ? '+' : ''}${gain.toFixed(2)}
+                            </p>
+                            <p style={{
+                              color: gain >= 0 ? '#10b981' : '#ef4444',
+                              fontSize: 13,
+                              margin: '3px 0 0 0',
+                              fontWeight: 600
+                            }}>
+                              {gainPercent >= 0 ? '+' : ''}{gainPercent.toFixed(2)}%
+                            </p>
+                          </div>
+                        )}
                         <button onClick={() => handleSell(ticker)}
-                          style={{ marginTop: 8, padding: '4px 12px', background: 'transparent', color: '#ef4444', border: '1px solid #ef4444', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontSize: 12 }}>
+                          style={{
+                            padding: '10px 18px',
+                            background: 'transparent',
+                            color: '#ef4444',
+                            border: '2px solid #ef4444',
+                            borderRadius: 10,
+                            cursor: 'pointer',
+                            fontFamily: 'inherit',
+                            fontSize: 14,
+                            fontWeight: 600,
+                            transition: 'all 0.2s'
+                          }}>
                           Sell All
                         </button>
                       </div>
@@ -425,34 +712,68 @@ export default function Dashboard() {
 
         {tab === 'history' && (
           <div>
-            <h2 style={{ marginBottom: 16 }}>📋 Trade History</h2>
+            <h2 style={{ marginBottom: 28, fontSize: 24, fontWeight: 700 }}>📋 Trade History</h2>
             {tradeHistory.length === 0 ? (
-              <p style={{ color: t.subtext }}>No trades yet — buy or sell a stock to see history!</p>
+              <div style={{
+                padding: 72,
+                textAlign: 'center',
+                background: t.card,
+                borderRadius: 18,
+                border: `2px dashed ${t.border}`,
+                color: t.subtext
+              }}>
+                <div style={{ fontSize: 64, marginBottom: 20 }}>📋</div>
+                <p style={{ margin: 0, fontSize: 18, fontWeight: 500 }}>No trades yet</p>
+                <p style={{ margin: '8px 0 0 0', fontSize: 16 }}>Buy or sell a stock to see your history!</p>
+              </div>
             ) : (
               <div>
                 {/* Summary stats */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
-                  <div style={{ background: t.card, padding: 16, borderRadius: 8, border: `1px solid ${t.border}` }}>
-                    <p style={{ color: t.subtext, margin: '0 0 4px 0', fontSize: 12 }}>Total Trades</p>
-                    <p style={{ fontSize: 20, fontWeight: 'bold', margin: 0 }}>{tradeHistory.length}</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 24, marginBottom: 36 }}>
+                  <div style={{
+                    background: t.card,
+                    padding: 24,
+                    borderRadius: 18,
+                    border: `1px solid ${t.border}`,
+                    boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 6px rgba(0, 0, 0, 0.04)'
+                  }}>
+                    <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 14, fontWeight: 500 }}>Total Trades</p>
+                    <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>{tradeHistory.length}</p>
                   </div>
-                  <div style={{ background: t.card, padding: 16, borderRadius: 8, border: `1px solid ${t.border}` }}>
-                    <p style={{ color: t.subtext, margin: '0 0 4px 0', fontSize: 12 }}>Realised P&L</p>
+                  <div style={{
+                    background: t.card,
+                    padding: 24,
+                    borderRadius: 18,
+                    border: `1px solid ${t.border}`,
+                    boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 6px rgba(0, 0, 0, 0.04)'
+                  }}>
+                    <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 14, fontWeight: 500 }}>Realised P&L</p>
                     {(() => {
                       const realised = tradeHistory
                         .filter(h => h.action === 'SELL' && h.profit_loss !== null)
                         .reduce((sum, h) => sum + h.profit_loss, 0)
-                      return <p style={{ fontSize: 20, fontWeight: 'bold', margin: 0, color: realised >= 0 ? '#22c55e' : '#ef4444' }}>
+                      return <p style={{
+                        fontSize: 32,
+                        fontWeight: 700,
+                        margin: 0,
+                        color: realised >= 0 ? '#10b981' : '#ef4444'
+                      }}>
                         {realised >= 0 ? '+' : ''}${realised.toFixed(2)}
                       </p>
                     })()}
                   </div>
-                  <div style={{ background: t.card, padding: 16, borderRadius: 8, border: `1px solid ${t.border}` }}>
-                    <p style={{ color: t.subtext, margin: '0 0 4px 0', fontSize: 12 }}>Winning Trades</p>
+                  <div style={{
+                    background: t.card,
+                    padding: 24,
+                    borderRadius: 18,
+                    border: `1px solid ${t.border}`,
+                    boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 6px rgba(0, 0, 0, 0.04)'
+                  }}>
+                    <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 14, fontWeight: 500 }}>Winning Trades</p>
                     {(() => {
                       const sells = tradeHistory.filter(h => h.action === 'SELL' && h.profit_loss !== null)
                       const wins = sells.filter(h => h.profit_loss > 0).length
-                      return <p style={{ fontSize: 20, fontWeight: 'bold', margin: 0 }}>
+                      return <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>
                         {wins}/{sells.length}
                       </p>
                     })()}
@@ -460,8 +781,23 @@ export default function Dashboard() {
                 </div>
 
                 {/* Trade log */}
-                <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 8, overflow: 'hidden' }}>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px 100px 110px 110px', padding: '10px 16px', borderBottom: `1px solid ${t.border}`, color: t.subtext, fontSize: 12 }}>
+                <div style={{
+                  background: t.card,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: 18,
+                  overflow: 'hidden',
+                  boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 6px rgba(0, 0, 0, 0.04)'
+                }}>
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 90px 110px 110px 120px 120px',
+                    padding: '16px 24px',
+                    background: darkMode ? 'rgba(0, 0, 0, 0.2)' : '#f8fafc',
+                    color: t.subtext,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    borderBottom: `1px solid ${t.border}`
+                  }}>
                     <span>Date</span>
                     <span>Ticker</span>
                     <span>Action</span>
@@ -470,13 +806,38 @@ export default function Dashboard() {
                     <span style={{ textAlign: 'right' }}>P&L</span>
                   </div>
                   {tradeHistory.map((h, i) => (
-                    <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 100px 100px 110px 110px', padding: '12px 16px', borderBottom: i < tradeHistory.length - 1 ? `1px solid ${t.border}` : 'none', fontSize: 13 }}>
-                      <span style={{ color: t.subtext }}>{new Date(h.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                      <span style={{ fontWeight: 'bold' }}>{h.ticker}</span>
-                      <span style={{ color: h.action === 'BUY' ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>{h.action}</span>
+                    <div key={i} style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 90px 110px 110px 120px 120px',
+                      padding: '16px 24px',
+                      borderBottom: i < tradeHistory.length - 1 ? `1px solid ${t.border}` : 'none',
+                      fontSize: 14,
+                      transition: 'background 0.2s'
+                    }}>
+                      <span style={{ color: t.subtext }}>
+                        {new Date(h.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span style={{ fontWeight: 700 }}>{h.ticker}</span>
+                      <span style={{
+                        color: h.action === 'BUY' ? '#10b981' : '#ef4444',
+                        fontWeight: 700,
+                        background: h.action === 'BUY'
+                          ? (darkMode ? 'rgba(16, 185, 129, 0.1)' : '#d1fae5')
+                          : (darkMode ? 'rgba(239, 68, 68, 0.1)' : '#fee2e2'),
+                        padding: '4px 10px',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        display: 'inline-block'
+                      }}>
+                        {h.action}
+                      </span>
                       <span>{parseFloat(h.shares).toFixed(4)}</span>
                       <span>${parseFloat(h.price).toFixed(2)}</span>
-                      <span style={{ textAlign: 'right', color: h.profit_loss === null ? t.subtext : h.profit_loss >= 0 ? '#22c55e' : '#ef4444', fontWeight: 'bold' }}>
+                      <span style={{
+                        textAlign: 'right',
+                        color: h.profit_loss === null ? t.subtext : h.profit_loss >= 0 ? '#10b981' : '#ef4444',
+                        fontWeight: 700
+                      }}>
                         {h.profit_loss === null ? '—' : `${h.profit_loss >= 0 ? '+' : ''}$${parseFloat(h.profit_loss).toFixed(2)}`}
                       </span>
                     </div>
@@ -488,19 +849,42 @@ export default function Dashboard() {
         )}
 
         {tab === 'advisor' && (
-          <div style={{ maxWidth: 700 }}>
-            <h2 style={{ marginBottom: 4 }}>🤖 AI Stock Advisor</h2>
-            <p style={{ color: t.subtext, fontSize: 12, marginBottom: 16 }}>Powered by Claude · For educational purposes only, not real financial advice</p>
+          <div style={{ maxWidth: 900 }}>
+            <div style={{ marginBottom: 28 }}>
+              <h2 style={{ marginBottom: 10, fontSize: 24, fontWeight: 700 }}>🤖 AI Stock Advisor</h2>
+              <p style={{ color: t.subtext, fontSize: 15, margin: 0 }}>Powered by Claude · For educational purposes only, not real financial advice</p>
+            </div>
 
-            <div style={{ background: t.card, border: `1px solid ${t.border}`, borderRadius: 8, padding: 16, height: 400, overflowY: 'auto', marginBottom: 12 }}>
+            <div style={{
+              background: t.card,
+              border: `1px solid ${t.border}`,
+              borderRadius: 18,
+              padding: 24,
+              height: 500,
+              overflowY: 'auto',
+              marginBottom: 20,
+              boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 6px rgba(0, 0, 0, 0.04)'
+            }}>
               {chatMessages.map((msg, i) => (
-                <div key={i} style={{ marginBottom: 16, display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start' }}>
+                <div key={i} style={{
+                  marginBottom: 18,
+                  display: 'flex',
+                  justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start'
+                }}>
                   <div style={{
-                    maxWidth: '80%', padding: '10px 14px', borderRadius: 8,
-                    background: msg.role === 'user' ? '#4a90e2' : t.bg,
+                    maxWidth: '80%',
+                    padding: '14px 18px',
+                    borderRadius: 14,
+                    background: msg.role === 'user'
+                      ? t.accentGradient
+                      : (darkMode ? '#1a1a2e' : '#f8fafc'),
                     color: msg.role === 'user' ? 'white' : t.text,
                     border: msg.role === 'assistant' ? `1px solid ${t.border}` : 'none',
-                    fontSize: 13, lineHeight: 1.5
+                    fontSize: 15,
+                    lineHeight: 1.6,
+                    boxShadow: msg.role === 'user'
+                      ? '0 2px 8px rgba(102, 126, 234, 0.3)'
+                      : (darkMode ? '0 1px 4px rgba(0, 0, 0, 0.2)' : 'none')
                   }}>
                     {msg.text}
                   </div>
@@ -508,7 +892,14 @@ export default function Dashboard() {
               ))}
               {chatLoading && (
                 <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
-                  <div style={{ padding: '10px 14px', borderRadius: 8, background: t.bg, border: `1px solid ${t.border}`, color: t.subtext, fontSize: 13 }}>
+                  <div style={{
+                    padding: '14px 18px',
+                    borderRadius: 14,
+                    background: darkMode ? '#1a1a2e' : '#f8fafc',
+                    border: `1px solid ${t.border}`,
+                    color: t.subtext,
+                    fontSize: 15
+                  }}>
                     Thinking...
                   </div>
                 </div>
@@ -516,22 +907,55 @@ export default function Dashboard() {
               <div ref={chatEndRef} />
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 16 }}>
               {['How is my portfolio doing?', 'What should I buy next?', 'Explain diversification', 'Am I taking too much risk?'].map(q => (
                 <button key={q} onClick={() => setChatInput(q)}
-                  style={{ padding: '4px 10px', background: t.card, border: `1px solid ${t.border}`, borderRadius: 20, cursor: 'pointer', fontFamily: 'monospace', fontSize: 11, color: t.subtext }}>
+                  style={{
+                    padding: '10px 16px',
+                    background: t.card,
+                    border: `1px solid ${t.border}`,
+                    borderRadius: 20,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: 14,
+                    color: t.subtext,
+                    transition: 'all 0.2s',
+                    fontWeight: 500
+                  }}>
                   {q}
                 </button>
               ))}
             </div>
 
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 12 }}>
               <input type="text" placeholder="Ask about your portfolio or stocks..."
                 value={chatInput} onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleChat()}
-                style={{ flex: 1, padding: 10, borderRadius: 4, border: `1px solid ${t.inputBorder}`, fontFamily: 'monospace', background: t.input, color: t.text }} />
+                style={{
+                  flex: 1,
+                  padding: '14px 18px',
+                  borderRadius: 12,
+                  border: `2px solid ${t.inputBorder}`,
+                  fontFamily: 'inherit',
+                  background: t.input,
+                  color: t.text,
+                  fontSize: 16,
+                  transition: 'all 0.2s'
+                }} />
               <button onClick={handleChat} disabled={chatLoading}
-                style={{ padding: '10px 20px', background: chatLoading ? t.border : '#4a90e2', color: 'white', border: 'none', borderRadius: 4, cursor: chatLoading ? 'default' : 'pointer', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                style={{
+                  padding: '14px 28px',
+                  background: chatLoading ? t.border : t.accentGradient,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 12,
+                  cursor: chatLoading ? 'not-allowed' : 'pointer',
+                  fontFamily: 'inherit',
+                  fontWeight: 600,
+                  fontSize: 16,
+                  boxShadow: chatLoading ? 'none' : '0 4px 12px rgba(102, 126, 234, 0.3)',
+                  transition: 'all 0.2s'
+                }}>
                 Send
               </button>
             </div>

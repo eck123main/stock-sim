@@ -55,33 +55,125 @@ export default function ResetPassword() {
   }
 
   return (
-    <div style={{ maxWidth: 400, margin: '100px auto', fontFamily: 'monospace' }}>
-      <h1 style={{ marginBottom: 24 }}>🔑 Set New Password</h1>
-      
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px'
+    }}>
+      <div style={{
+        maxWidth: 520,
+        width: '100%',
+        background: 'rgba(255, 255, 255, 0.95)',
+        backdropFilter: 'blur(10px)',
+        borderRadius: 24,
+        padding: '56px 48px',
+        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)'
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 40 }}>
+          <div style={{ fontSize: 64, marginBottom: 20 }}>🔑</div>
+          <h1 style={{ margin: 0, fontSize: 32, fontWeight: 700, color: '#1a1a1a', marginBottom: 10 }}>Set New Password</h1>
+        </div>
+
       {!token && (
-        <p style={{ color: 'red' }}>Invalid or expired reset link. Please request a new one.</p>
+        <div style={{
+          padding: '14px 18px',
+          background: '#fee',
+          border: '1px solid #fcc',
+          borderRadius: 8,
+          color: '#c33',
+          fontSize: 15
+        }}>Invalid or expired reset link. Please request a new one.</div>
       )}
 
       {!success && token && (
         <>
           <input placeholder="New Password" type="password" value={password} onChange={e => setPassword(e.target.value)}
-            style={{ display: 'block', width: '100%', padding: 10, marginBottom: 12 }} />
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '16px 18px',
+              marginBottom: 14,
+              border: '2px solid #e0e0e0',
+              borderRadius: 12,
+              fontSize: 16,
+              fontFamily: 'inherit',
+              transition: 'all 0.2s',
+              boxSizing: 'border-box'
+            }} />
           <input placeholder="Confirm Password" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-            style={{ display: 'block', width: '100%', padding: 10, marginBottom: 12 }} />
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '16px 18px',
+              marginBottom: 24,
+              border: '2px solid #e0e0e0',
+              borderRadius: 12,
+              fontSize: 16,
+              fontFamily: 'inherit',
+              transition: 'all 0.2s',
+              boxSizing: 'border-box'
+            }} />
           <button onClick={handleResetPassword} disabled={loading}
-            style={{ width: '100%', padding: 12, background: loading ? '#ccc' : 'black', color: 'white', cursor: loading ? 'default' : 'pointer' }}>
+            style={{
+              width: '100%',
+              padding: '16px',
+              background: loading ? '#cbd5e1' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              border: 'none',
+              borderRadius: 12,
+              fontSize: 17,
+              fontWeight: 600,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'all 0.3s',
+              boxShadow: loading ? 'none' : '0 4px 15px rgba(102, 126, 234, 0.4)'
+            }}>
             {loading ? 'Resetting...' : 'Reset Password'}
           </button>
         </>
       )}
 
-      {error && <p style={{ color: 'red', marginTop: 12 }}>{error}</p>}
-      {message && <p style={{ color: 'green', marginTop: 12 }}>{message}</p>}
+      {error && (
+        <div style={{
+          marginTop: 20,
+          padding: '14px 18px',
+          background: '#fee',
+          border: '1px solid #fcc',
+          borderRadius: 8,
+          color: '#c33',
+          fontSize: 15
+        }}>{error}</div>
+      )}
+      {message && (
+        <div style={{
+          marginTop: 20,
+          padding: '14px 18px',
+          background: '#efe',
+          border: '1px solid #cfc',
+          borderRadius: 8,
+          color: '#282',
+          fontSize: 15
+        }}>{message}</div>
+      )}
 
-      <p style={{ marginTop: 16, cursor: 'pointer', textDecoration: 'underline' }}
-        onClick={() => window.location.href = '/'}>
-        Back to login
-      </p>
+      <button
+        onClick={() => window.location.href = '/'}
+        style={{
+          marginTop: 24,
+          width: '100%',
+          padding: '14px',
+          background: 'transparent',
+          border: 'none',
+          color: '#667eea',
+          cursor: 'pointer',
+          fontSize: 16,
+          fontWeight: 500
+        }}>
+        ← Back to login
+      </button>
+      </div>
     </div>
   )
 }
