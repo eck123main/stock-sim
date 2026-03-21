@@ -3,6 +3,41 @@ import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { searchStock } from '../../lib/stocks'
 
+// Helper function to format currency with commas
+function formatCurrency(amount: number): string {
+  return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// Helper function to group trades by time period
+function groupTradesByPeriod(trades: any[]) {
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000)
+
+  const groups = {
+    today: [] as any[],
+    thisWeek: [] as any[],
+    thisMonth: [] as any[],
+    earlier: [] as any[]
+  }
+
+  trades.forEach(trade => {
+    const tradeDate = new Date(trade.created_at)
+    if (tradeDate >= today) {
+      groups.today.push(trade)
+    } else if (tradeDate >= weekAgo) {
+      groups.thisWeek.push(trade)
+    } else if (tradeDate >= monthAgo) {
+      groups.thisMonth.push(trade)
+    } else {
+      groups.earlier.push(trade)
+    }
+  })
+
+  return groups
+}
+
 export default function Dashboard() {
   const [user, setUser] = useState<any>(null)
   const [portfolio, setPortfolio] = useState<any>(null)
@@ -18,6 +53,8 @@ export default function Dashboard() {
   const [searchError, setSearchError] = useState('')
   const [darkMode, setDarkMode] = useState(false)
   const [tab, setTab] = useState<'market' | 'history' | 'advisor'>('market')
+  const [showDepositModal, setShowDepositModal] = useState(false)
+  const [depositAmount, setDepositAmount] = useState('')
   const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'assistant', text: string }[]>([
     { role: 'assistant', text: "Hi! I'm your AI stock advisor. Ask me anything about your portfolio, stocks to consider, or investing concepts. Remember — this is a simulator for learning!" }
   ])
@@ -58,11 +95,17 @@ export default function Dashboard() {
       const loadedTrades = tradesData || []
       setTrades(loadedTrades)
 
-      const { data: historyData } = await supabase
+      // Fetch ALL trade history - no limits
+      const { data: historyData, error: historyError } = await supabase
         .from('trade_history')
         .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
+        .limit(10000) // Set a very high limit to ensure we get everything
+
+      if (historyError) {
+        console.error('Error fetching trade history:', historyError)
+      }
       setTradeHistory(historyData || [])
 
       setLoading(false)
@@ -128,7 +171,7 @@ export default function Dashboard() {
     setTrades(prev => [...prev, { ticker: selectedStock.ticker, shares, price_at_purchase: selectedStock.price }])
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
     setBuyAmount('')
-    setMessage(`✅ Bought ${shares.toFixed(4)} shares of ${selectedStock.ticker}!`)
+    setMessage(`✅ Bought ${shares.toFixed(4)} shares of ${selectedStock.ticker} for $${formatCurrency(dollars)}!`)
   }
 
   async function handleSell(ticker: string) {
@@ -159,7 +202,7 @@ export default function Dashboard() {
     setTrades(prev => prev.filter(tr => tr.ticker !== ticker))
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
     if (selectedStock?.ticker === ticker) setSelectedStock(null)
-    setMessage(`✅ Sold all ${ticker} for $${value.toFixed(2)}! P&L: ${profitLoss >= 0 ? '+' : ''}$${profitLoss.toFixed(2)}`)
+    setMessage(`✅ Sold all ${ticker} for $${formatCurrency(value)}! P&L: ${profitLoss >= 0 ? '+' : ''}$${formatCurrency(Math.abs(profitLoss))}`)
   }
 
   async function handleChat() {
@@ -214,6 +257,24 @@ export default function Dashboard() {
   async function handleLogout() {
     await supabase.auth.signOut()
     window.location.href = '/'
+  }
+
+  async function handleDeposit(presetAmount?: number) {
+    const amount = presetAmount || parseFloat(depositAmount)
+    if (isNaN(amount) || amount <= 0) {
+      setMessage('Please enter a valid amount')
+      return
+    }
+    if (amount > 1000000) {
+      setMessage('Maximum deposit is $1,000,000')
+      return
+    }
+    const newCash = portfolio.cash + amount
+    await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
+    setPortfolio({ ...portfolio, cash: newCash })
+    setShowDepositModal(false)
+    setDepositAmount('')
+    setMessage(`💰 Deposited $${formatCurrency(amount)}`)
   }
 
   if (!user || loading) return (
@@ -314,15 +375,10 @@ export default function Dashboard() {
           </div>
         )}
 
-        <button onClick={async () => {
-          const newCash = portfolio.cash + 10000
-          await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
-          setPortfolio({ ...portfolio, cash: newCash })
-          setMessage('💸 Added $10,000!')
-        }} style={{
+        <button onClick={() => setShowDepositModal(true)} style={{
           marginBottom: 40,
           padding: '14px 28px',
-          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
           color: 'white',
           border: 'none',
           borderRadius: 12,
@@ -330,11 +386,120 @@ export default function Dashboard() {
           fontFamily: 'inherit',
           fontSize: 16,
           fontWeight: 600,
-          boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)',
+          boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
           transition: 'all 0.2s'
         }}>
-          💸 Add $10,000
+          💰 Deposit Funds
         </button>
+
+        {/* Deposit Modal */}
+        {showDepositModal && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }} onClick={() => setShowDepositModal(false)}>
+            <div style={{
+              background: darkMode ? '#1a1a2e' : '#ffffff',
+              borderRadius: 20,
+              padding: '40px',
+              maxWidth: 500,
+              width: '100%',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+              border: `1px solid ${t.border}`
+            }} onClick={e => e.stopPropagation()}>
+              <h2 style={{ margin: '0 0 10px 0', fontSize: 28, fontWeight: 700 }}>💰 Deposit Funds</h2>
+              <p style={{ color: t.subtext, margin: '0 0 28px 0', fontSize: 15 }}>Add virtual cash to your trading account</p>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 12, marginBottom: 20 }}>
+                {[1000, 5000, 10000, 50000].map(amount => (
+                  <button key={amount} onClick={() => handleDeposit(amount)} style={{
+                    padding: '16px',
+                    background: t.card,
+                    border: `2px solid ${t.border}`,
+                    borderRadius: 12,
+                    cursor: 'pointer',
+                    fontFamily: 'inherit',
+                    fontSize: 18,
+                    fontWeight: 600,
+                    color: t.text,
+                    transition: 'all 0.2s'
+                  }}>
+                    ${formatCurrency(amount)}
+                  </button>
+                ))}
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 10, fontSize: 15, fontWeight: 500, color: t.text }}>Custom Amount</label>
+                <input
+                  type="number"
+                  placeholder="Enter amount"
+                  value={depositAmount}
+                  onChange={e => setDepositAmount(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleDeposit()}
+                  style={{
+                    width: '100%',
+                    padding: '14px 18px',
+                    borderRadius: 12,
+                    border: `2px solid ${t.inputBorder}`,
+                    fontFamily: 'inherit',
+                    background: t.input,
+                    color: t.text,
+                    fontSize: 16,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={handleDeposit} style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: t.accentGradient,
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
+                  transition: 'all 0.2s'
+                }}>
+                  Deposit
+                </button>
+                <button onClick={() => {
+                  setShowDepositModal(false)
+                  setDepositAmount('')
+                }} style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: 'transparent',
+                  color: t.text,
+                  border: `2px solid ${t.border}`,
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  transition: 'all 0.2s'
+                }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 24, marginBottom: 48 }}>
@@ -347,7 +512,7 @@ export default function Dashboard() {
             transition: 'transform 0.2s',
           }}>
             <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 15, fontWeight: 500 }}>💰 Cash Available</p>
-            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${portfolio?.cash?.toFixed(2)}</p>
+            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${formatCurrency(portfolio?.cash || 0)}</p>
           </div>
           <div style={{
             background: t.card,
@@ -358,7 +523,7 @@ export default function Dashboard() {
             transition: 'transform 0.2s',
           }}>
             <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 15, fontWeight: 500 }}>📊 Portfolio Value</p>
-            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${portfolioValue.toFixed(2)}</p>
+            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${formatCurrency(portfolioValue)}</p>
           </div>
           <div style={{
             background: t.card,
@@ -369,7 +534,7 @@ export default function Dashboard() {
             transition: 'transform 0.2s',
           }}>
             <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 15, fontWeight: 500 }}>💼 Total Value</p>
-            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${(portfolio?.cash + portfolioValue).toFixed(2)}</p>
+            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${formatCurrency((portfolio?.cash || 0) + portfolioValue)}</p>
           </div>
           <div style={{
             background: totalPnl >= 0
@@ -390,7 +555,7 @@ export default function Dashboard() {
               margin: 0,
               color: totalPnl >= 0 ? (darkMode ? '#6ee7b7' : '#059669') : (darkMode ? '#fca5a5' : '#dc2626')
             }}>
-              {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+              {totalPnl >= 0 ? '+' : ''}${formatCurrency(Math.abs(totalPnl))}
             </p>
           </div>
         </div>
@@ -527,7 +692,7 @@ export default function Dashboard() {
                       )}
                     </div>
                     <p style={{ fontSize: 36, fontWeight: 700, margin: 0, color: darkMode ? '#60a5fa' : '#3b82f6' }}>
-                      ${selectedStock.price?.toFixed(2)}
+                      ${formatCurrency(selectedStock.price || 0)}
                     </p>
                   </div>
                   <input type="number" placeholder="Amount in $ (e.g., 500)" value={buyAmount}
@@ -646,19 +811,19 @@ export default function Dashboard() {
                           )}
                         </div>
                         <p style={{ fontSize: 14, color: t.subtext, margin: '0 0 5px 0' }}>
-                          {holding.shares.toFixed(4)} shares @ avg ${holding.avgPrice.toFixed(2)}
+                          {holding.shares.toFixed(4)} shares @ avg ${formatCurrency(holding.avgPrice)}
                         </p>
                         <p style={{ fontSize: 14, color: t.subtext, margin: '0 0 5px 0' }}>
-                          Cost: ${costBasis.toFixed(2)}
+                          Cost: ${formatCurrency(costBasis)}
                         </p>
                         {livePrice && (
                           <p style={{ fontSize: 14, color: t.subtext, margin: 0 }}>
-                            Current: ${livePrice.toFixed(2)}
+                            Current: ${formatCurrency(livePrice)}
                           </p>
                         )}
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontWeight: 700, margin: '0 0 10px 0', fontSize: 22 }}>${currentValue.toFixed(2)}</p>
+                        <p style={{ fontWeight: 700, margin: '0 0 10px 0', fontSize: 22 }}>${formatCurrency(currentValue)}</p>
                         {gain !== null && (
                           <div style={{
                             padding: '8px 14px',
@@ -674,7 +839,7 @@ export default function Dashboard() {
                               margin: 0,
                               fontWeight: 700
                             }}>
-                              {gain >= 0 ? '+' : ''}${gain.toFixed(2)}
+                              {gain >= 0 ? '+' : ''}${formatCurrency(Math.abs(gain))}
                             </p>
                             <p style={{
                               color: gain >= 0 ? '#10b981' : '#ef4444',
@@ -758,7 +923,7 @@ export default function Dashboard() {
                         margin: 0,
                         color: realised >= 0 ? '#10b981' : '#ef4444'
                       }}>
-                        {realised >= 0 ? '+' : ''}${realised.toFixed(2)}
+                        {realised >= 0 ? '+' : ''}${formatCurrency(Math.abs(realised))}
                       </p>
                     })()}
                   </div>
@@ -780,69 +945,87 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Trade log */}
-                <div style={{
-                  background: t.card,
-                  border: `1px solid ${t.border}`,
-                  borderRadius: 18,
-                  overflow: 'hidden',
-                  boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 6px rgba(0, 0, 0, 0.04)'
-                }}>
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 90px 110px 110px 120px 120px',
-                    padding: '16px 24px',
-                    background: darkMode ? 'rgba(0, 0, 0, 0.2)' : '#f8fafc',
-                    color: t.subtext,
-                    fontSize: 14,
-                    fontWeight: 600,
-                    borderBottom: `1px solid ${t.border}`
-                  }}>
-                    <span>Date</span>
-                    <span>Ticker</span>
-                    <span>Action</span>
-                    <span>Shares</span>
-                    <span>Price</span>
-                    <span style={{ textAlign: 'right' }}>P&L</span>
-                  </div>
-                  {tradeHistory.map((h, i) => (
-                    <div key={i} style={{
-                      display: 'grid',
-                      gridTemplateColumns: '1fr 90px 110px 110px 120px 120px',
-                      padding: '16px 24px',
-                      borderBottom: i < tradeHistory.length - 1 ? `1px solid ${t.border}` : 'none',
-                      fontSize: 14,
-                      transition: 'background 0.2s'
-                    }}>
-                      <span style={{ color: t.subtext }}>
-                        {new Date(h.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      <span style={{ fontWeight: 700 }}>{h.ticker}</span>
-                      <span style={{
-                        color: h.action === 'BUY' ? '#10b981' : '#ef4444',
-                        fontWeight: 700,
-                        background: h.action === 'BUY'
-                          ? (darkMode ? 'rgba(16, 185, 129, 0.1)' : '#d1fae5')
-                          : (darkMode ? 'rgba(239, 68, 68, 0.1)' : '#fee2e2'),
-                        padding: '4px 10px',
-                        borderRadius: 8,
-                        fontSize: 13,
-                        display: 'inline-block'
-                      }}>
-                        {h.action}
-                      </span>
-                      <span>{parseFloat(h.shares).toFixed(4)}</span>
-                      <span>${parseFloat(h.price).toFixed(2)}</span>
-                      <span style={{
-                        textAlign: 'right',
-                        color: h.profit_loss === null ? t.subtext : h.profit_loss >= 0 ? '#10b981' : '#ef4444',
-                        fontWeight: 700
-                      }}>
-                        {h.profit_loss === null ? '—' : `${h.profit_loss >= 0 ? '+' : ''}$${parseFloat(h.profit_loss).toFixed(2)}`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                {/* Trade log - grouped by time period */}
+                {(() => {
+                  const grouped = groupTradesByPeriod(tradeHistory)
+                  const periods = [
+                    { key: 'today', label: 'Today', trades: grouped.today },
+                    { key: 'thisWeek', label: 'This Week', trades: grouped.thisWeek },
+                    { key: 'thisMonth', label: 'This Month', trades: grouped.thisMonth },
+                    { key: 'earlier', label: 'Earlier', trades: grouped.earlier }
+                  ]
+
+                  return periods.map(period => {
+                    if (period.trades.length === 0) return null
+                    return (
+                      <div key={period.key} style={{ marginBottom: 32 }}>
+                        <h3 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16, color: t.text }}>{period.label}</h3>
+                        <div style={{
+                          background: t.card,
+                          border: `1px solid ${t.border}`,
+                          borderRadius: 18,
+                          overflow: 'hidden',
+                          boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 6px rgba(0, 0, 0, 0.04)'
+                        }}>
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: '1fr 90px 110px 110px 130px 130px',
+                            padding: '16px 24px',
+                            background: darkMode ? 'rgba(0, 0, 0, 0.2)' : '#f8fafc',
+                            color: t.subtext,
+                            fontSize: 14,
+                            fontWeight: 600,
+                            borderBottom: `1px solid ${t.border}`
+                          }}>
+                            <span>Date</span>
+                            <span>Ticker</span>
+                            <span>Action</span>
+                            <span>Shares</span>
+                            <span>Price</span>
+                            <span style={{ textAlign: 'right' }}>P&L</span>
+                          </div>
+                          {period.trades.map((h, i) => (
+                            <div key={i} style={{
+                              display: 'grid',
+                              gridTemplateColumns: '1fr 90px 110px 110px 130px 130px',
+                              padding: '16px 24px',
+                              borderBottom: i < period.trades.length - 1 ? `1px solid ${t.border}` : 'none',
+                              fontSize: 14,
+                              transition: 'background 0.2s'
+                            }}>
+                              <span style={{ color: t.subtext }}>
+                                {new Date(h.created_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <span style={{ fontWeight: 700 }}>{h.ticker}</span>
+                              <span style={{
+                                color: h.action === 'BUY' ? '#10b981' : '#ef4444',
+                                fontWeight: 700,
+                                background: h.action === 'BUY'
+                                  ? (darkMode ? 'rgba(16, 185, 129, 0.1)' : '#d1fae5')
+                                  : (darkMode ? 'rgba(239, 68, 68, 0.1)' : '#fee2e2'),
+                                padding: '4px 10px',
+                                borderRadius: 8,
+                                fontSize: 13,
+                                display: 'inline-block'
+                              }}>
+                                {h.action}
+                              </span>
+                              <span>{parseFloat(h.shares).toFixed(4)}</span>
+                              <span>${formatCurrency(parseFloat(h.price))}</span>
+                              <span style={{
+                                textAlign: 'right',
+                                color: h.profit_loss === null ? t.subtext : h.profit_loss >= 0 ? '#10b981' : '#ef4444',
+                                fontWeight: 700
+                              }}>
+                                {h.profit_loss === null ? '—' : `${h.profit_loss >= 0 ? '+' : ''}$${formatCurrency(Math.abs(parseFloat(h.profit_loss)))}`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
               </div>
             )}
           </div>
