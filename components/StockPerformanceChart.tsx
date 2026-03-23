@@ -45,7 +45,7 @@ export default function StockPerformanceChart({ holdings, darkMode }: StockPerfo
           style={{ fontSize: '12px' }}
         />
         <Tooltip
-          formatter={(value: number) => [formatCurrency(value), 'Gain/Loss']}
+          formatter={(value) => [formatCurrency(value as number), 'Gain/Loss']}
           contentStyle={{
             backgroundColor: darkMode ? '#1a1a2e' : '#ffffff',
             border: `1px solid ${gridColor}`,
