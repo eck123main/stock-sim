@@ -48,8 +48,8 @@ export default function PortfolioChart({ data, darkMode }: PortfolioChartProps) 
           style={{ fontSize: '12px' }}
         />
         <Tooltip
-          formatter={(value: number) => [formatCurrency(value), 'Portfolio Value']}
-          labelFormatter={(timestamp) => new Date(timestamp).toLocaleString()}
+          formatter={(value) => [formatCurrency(Number(value || 0)), 'Portfolio Value']}
+          labelFormatter={(timestamp) => new Date(Number(timestamp)).toLocaleString()}
           contentStyle={{
             backgroundColor: darkMode ? '#1a1a2e' : '#ffffff',
             border: `1px solid ${gridColor}`,
