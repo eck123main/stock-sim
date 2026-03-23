@@ -40,7 +40,7 @@ export default function PortfolioComposition({ holdings, cash, darkMode }: Portf
           cx="50%"
           cy="50%"
           labelLine={false}
-          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(1)}%`}
+          label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(1)}%`}
           outerRadius={80}
           fill="#8884d8"
           dataKey="value"
@@ -50,7 +50,7 @@ export default function PortfolioComposition({ holdings, cash, darkMode }: Portf
           ))}
         </Pie>
         <Tooltip
-          formatter={(value: number) => formatCurrency(value)}
+          formatter={(value) => formatCurrency(value as number)}
           contentStyle={{
             backgroundColor: darkMode ? '#1a1a2e' : '#ffffff',
             border: `1px solid ${darkMode ? '#2a2a4a' : '#e0e7ed'}`,
