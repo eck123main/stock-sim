@@ -2,6 +2,9 @@
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '../../lib/supabase'
 import { searchStock } from '../../lib/stocks'
+import PortfolioChart from '../../components/PortfolioChart'
+import StockPerformanceChart from '../../components/StockPerformanceChart'
+import PortfolioComposition from '../../components/PortfolioComposition'
 
 // Helper function to format currency with commas
 function formatCurrency(amount: number): string {
@@ -52,7 +55,7 @@ export default function Dashboard() {
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState('')
   const [darkMode, setDarkMode] = useState(false)
-  const [tab, setTab] = useState<'market' | 'history' | 'advisor'>('market')
+  const [tab, setTab] = useState<'market' | 'history' | 'advisor' | 'analytics'>('market')
   const [showDepositModal, setShowDepositModal] = useState(false)
   const [depositAmount, setDepositAmount] = useState('')
   const [refreshingPrices, setRefreshingPrices] = useState(false)
@@ -61,6 +64,13 @@ export default function Dashboard() {
   ])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
+  const [portfolioSnapshots, setPortfolioSnapshots] = useState<any[]>([])
+  const [watchlist, setWatchlist] = useState<string[]>([])
+  const [pendingOrders, setPendingOrders] = useState<any[]>([])
+  const [showOrderModal, setShowOrderModal] = useState(false)
+  const [orderType, setOrderType] = useState<'LIMIT_BUY' | 'LIMIT_SELL' | 'STOP_LOSS'>('LIMIT_BUY')
+  const [orderPrice, setOrderPrice] = useState('')
+  const [orderAmount, setOrderAmount] = useState('')
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const t = {
@@ -109,6 +119,32 @@ export default function Dashboard() {
       }
       setTradeHistory(historyData || [])
 
+      // Fetch portfolio snapshots
+      const { data: snapshotsData } = await supabase
+        .from('portfolio_snapshots')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(100)
+      setPortfolioSnapshots(snapshotsData || [])
+
+      // Fetch user watchlist
+      const { data: watchlistData } = await supabase
+        .from('user_watchlists')
+        .select('ticker')
+        .eq('user_id', user.id)
+        .order('added_at', { ascending: false })
+      setWatchlist(watchlistData?.map(w => w.ticker) || [])
+
+      // Fetch pending orders
+      const { data: ordersData } = await supabase
+        .from('pending_orders')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'PENDING')
+        .order('created_at', { ascending: false })
+      setPendingOrders(ordersData || [])
+
       setLoading(false)
 
       // Load cached prices from localStorage
@@ -136,6 +172,245 @@ export default function Dashboard() {
     setSearchLoading(false)
   }
 
+  async function savePortfolioSnapshot() {
+    if (!user || !portfolio) return
+
+    const holdingsValue = getAllHeldTickers().reduce((sum, ticker) => {
+      const holding = getHolding(ticker)
+      if (!holding) return sum
+      return sum + holding.shares * (livePrices[ticker] || holding.avgPrice)
+    }, 0)
+
+    const totalValue = portfolio.cash + holdingsValue
+
+    await supabase.from('portfolio_snapshots').insert({
+      user_id: user.id,
+      portfolio_value: totalValue,
+      cash: portfolio.cash,
+      holdings_value: holdingsValue
+    })
+
+    // Fetch updated snapshots
+    const { data: snapshotsData } = await supabase
+      .from('portfolio_snapshots')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true })
+      .limit(100)
+    setPortfolioSnapshots(snapshotsData || [])
+  }
+
+  async function addToWatchlist(ticker: string) {
+    if (watchlist.includes(ticker)) {
+      setMessage(`${ticker} is already in your watchlist!`)
+      return
+    }
+
+    const { error } = await supabase.from('user_watchlists').insert({
+      user_id: user.id,
+      ticker
+    })
+
+    if (error) {
+      setMessage(`Failed to add ${ticker} to watchlist`)
+      return
+    }
+
+    setWatchlist(prev => [ticker, ...prev])
+    setMessage(`✅ Added ${ticker} to your watchlist!`)
+  }
+
+  async function removeFromWatchlist(ticker: string) {
+    await supabase
+      .from('user_watchlists')
+      .delete()
+      .eq('user_id', user.id)
+      .eq('ticker', ticker)
+
+    setWatchlist(prev => prev.filter(t => t !== ticker))
+    setMessage(`Removed ${ticker} from watchlist`)
+  }
+
+  async function createOrder() {
+    if (!selectedStock || !orderPrice) {
+      setMessage('Please enter a target price')
+      return
+    }
+
+    const targetPrice = parseFloat(orderPrice)
+    if (isNaN(targetPrice) || targetPrice <= 0) {
+      setMessage('Please enter a valid price')
+      return
+    }
+
+    // Validation for different order types
+    if (orderType === 'LIMIT_BUY') {
+      if (!orderAmount) {
+        setMessage('Please enter an amount')
+        return
+      }
+      const amount = parseFloat(orderAmount)
+      if (isNaN(amount) || amount <= 0) {
+        setMessage('Please enter a valid amount')
+        return
+      }
+      if (amount > portfolio.cash) {
+        setMessage('Not enough cash!')
+        return
+      }
+
+      // Create limit buy order
+      await supabase.from('pending_orders').insert({
+        user_id: user.id,
+        ticker: selectedStock.ticker,
+        order_type: 'LIMIT_BUY',
+        shares: 0, // Will be calculated when executed
+        target_price: targetPrice,
+        amount: amount
+      })
+
+      setMessage(`✅ Limit buy order created: Buy ${selectedStock.ticker} when price ≤ $${formatCurrency(targetPrice)}`)
+    } else if (orderType === 'LIMIT_SELL' || orderType === 'STOP_LOSS') {
+      const holding = getHolding(selectedStock.ticker)
+      if (!holding) {
+        setMessage(`You don't own any ${selectedStock.ticker}`)
+        return
+      }
+
+      await supabase.from('pending_orders').insert({
+        user_id: user.id,
+        ticker: selectedStock.ticker,
+        order_type: orderType,
+        shares: holding.shares,
+        target_price: targetPrice,
+        amount: null
+      })
+
+      const orderName = orderType === 'LIMIT_SELL' ? 'Limit sell' : 'Stop-loss'
+      const condition = orderType === 'LIMIT_SELL' ? '≥' : '≤'
+      setMessage(`✅ ${orderName} order created: Sell ${holding.shares.toFixed(4)} ${selectedStock.ticker} when price ${condition} $${formatCurrency(targetPrice)}`)
+    }
+
+    // Refresh pending orders
+    const { data: ordersData } = await supabase
+      .from('pending_orders')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'PENDING')
+      .order('created_at', { ascending: false })
+    setPendingOrders(ordersData || [])
+
+    setShowOrderModal(false)
+    setOrderPrice('')
+    setOrderAmount('')
+  }
+
+  async function cancelOrder(orderId: string) {
+    await supabase
+      .from('pending_orders')
+      .update({ status: 'CANCELLED' })
+      .eq('id', orderId)
+
+    setPendingOrders(prev => prev.filter(o => o.id !== orderId))
+    setMessage('Order cancelled')
+  }
+
+  async function checkAndExecuteOrders() {
+    if (pendingOrders.length === 0) return
+
+    for (const order of pendingOrders) {
+      const currentPrice = livePrices[order.ticker]
+      if (!currentPrice) continue
+
+      let shouldExecute = false
+
+      if (order.order_type === 'LIMIT_BUY' && currentPrice <= order.target_price) {
+        shouldExecute = true
+      } else if (order.order_type === 'LIMIT_SELL' && currentPrice >= order.target_price) {
+        shouldExecute = true
+      } else if (order.order_type === 'STOP_LOSS' && currentPrice <= order.target_price) {
+        shouldExecute = true
+      }
+
+      if (shouldExecute) {
+        // Execute the order
+        if (order.order_type === 'LIMIT_BUY') {
+          const shares = order.amount / currentPrice
+          const newCash = portfolio.cash - order.amount
+
+          await supabase.from('trades').insert({
+            user_id: user.id,
+            ticker: order.ticker,
+            company_name: order.ticker,
+            shares,
+            price_at_purchase: currentPrice
+          })
+
+          await supabase.from('trade_history').insert({
+            user_id: user.id,
+            ticker: order.ticker,
+            company_name: order.ticker,
+            action: 'BUY',
+            shares,
+            price: currentPrice,
+            total_value: order.amount,
+            profit_loss: null
+          })
+
+          await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
+
+          setPortfolio({ ...portfolio, cash: newCash })
+          setTrades(prev => [...prev, { ticker: order.ticker, shares, price_at_purchase: currentPrice }])
+
+          setMessage(`🎯 Limit buy executed: Bought ${shares.toFixed(4)} ${order.ticker} at $${formatCurrency(currentPrice)}!`)
+        } else {
+          // LIMIT_SELL or STOP_LOSS
+          const value = order.shares * currentPrice
+          const holding = getHolding(order.ticker)
+          const profitLoss = holding ? value - (order.shares * holding.avgPrice) : 0
+          const newCash = portfolio.cash + value
+
+          await supabase.from('trades').delete().eq('user_id', user.id).eq('ticker', order.ticker)
+
+          await supabase.from('trade_history').insert({
+            user_id: user.id,
+            ticker: order.ticker,
+            action: 'SELL',
+            shares: order.shares,
+            price: currentPrice,
+            total_value: value,
+            profit_loss: profitLoss
+          })
+
+          await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
+
+          setPortfolio({ ...portfolio, cash: newCash })
+          setTrades(prev => prev.filter(tr => tr.ticker !== order.ticker))
+
+          const orderName = order.order_type === 'STOP_LOSS' ? 'Stop-loss' : 'Limit sell'
+          setMessage(`🎯 ${orderName} executed: Sold ${order.shares.toFixed(4)} ${order.ticker} at $${formatCurrency(currentPrice)}!`)
+        }
+
+        // Mark order as executed
+        await supabase
+          .from('pending_orders')
+          .update({ status: 'EXECUTED', executed_at: new Date().toISOString() })
+          .eq('id', order.id)
+
+        savePortfolioSnapshot()
+      }
+    }
+
+    // Refresh pending orders
+    const { data: ordersData } = await supabase
+      .from('pending_orders')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('status', 'PENDING')
+      .order('created_at', { ascending: false })
+    setPendingOrders(ordersData || [])
+  }
+
   async function handleRefreshPrices() {
     setRefreshingPrices(true)
     setMessage('')
@@ -157,6 +432,9 @@ export default function Dashboard() {
     localStorage.setItem('stock_prices_timestamp', Date.now().toString())
     setRefreshingPrices(false)
     setMessage('✅ Prices refreshed successfully!')
+
+    // Check and execute any pending orders
+    await checkAndExecuteOrders()
   }
 
   async function handleBuy() {
@@ -194,6 +472,9 @@ export default function Dashboard() {
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
     setBuyAmount('')
     setMessage(`✅ Bought ${shares.toFixed(4)} shares of ${selectedStock.ticker} for $${formatCurrency(dollars)}!`)
+
+    // Save portfolio snapshot
+    savePortfolioSnapshot()
   }
 
   async function handleSell(ticker: string) {
@@ -225,6 +506,9 @@ export default function Dashboard() {
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
     if (selectedStock?.ticker === ticker) setSelectedStock(null)
     setMessage(`✅ Sold all ${ticker} for $${formatCurrency(value)}! P&L: ${profitLoss >= 0 ? '+' : ''}$${formatCurrency(Math.abs(profitLoss))}`)
+
+    // Save portfolio snapshot
+    savePortfolioSnapshot()
   }
 
   async function handleChat() {
@@ -523,6 +807,144 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Order Modal */}
+        {showOrderModal && selectedStock && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }} onClick={() => setShowOrderModal(false)}>
+            <div style={{
+              background: darkMode ? '#1a1a2e' : '#ffffff',
+              borderRadius: 20,
+              padding: '40px',
+              maxWidth: 500,
+              width: '100%',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+              border: `1px solid ${t.border}`
+            }} onClick={e => e.stopPropagation()}>
+              <h2 style={{ margin: '0 0 10px 0', fontSize: 28, fontWeight: 700 }}>⏱️ Create Limit Order</h2>
+              <p style={{ color: t.subtext, margin: '0 0 28px 0', fontSize: 15 }}>
+                Set a target price for {selectedStock.ticker} (Current: ${formatCurrency(selectedStock.price || 0)})
+              </p>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 10, fontSize: 15, fontWeight: 500, color: t.text }}>Order Type</label>
+                <select
+                  value={orderType}
+                  onChange={e => setOrderType(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 18px',
+                    borderRadius: 12,
+                    border: `2px solid ${t.inputBorder}`,
+                    fontFamily: 'inherit',
+                    background: t.input,
+                    color: t.text,
+                    fontSize: 16,
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="LIMIT_BUY">Limit Buy (Buy when price drops to...)</option>
+                  <option value="LIMIT_SELL">Limit Sell (Sell when price rises to...)</option>
+                  <option value="STOP_LOSS">Stop Loss (Sell when price drops to...)</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 10, fontSize: 15, fontWeight: 500, color: t.text }}>Target Price</label>
+                <input
+                  type="number"
+                  placeholder="Enter target price"
+                  value={orderPrice}
+                  onChange={e => setOrderPrice(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 18px',
+                    borderRadius: 12,
+                    border: `2px solid ${t.inputBorder}`,
+                    fontFamily: 'inherit',
+                    background: t.input,
+                    color: t.text,
+                    fontSize: 16,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              {orderType === 'LIMIT_BUY' && (
+                <div style={{ marginBottom: 20 }}>
+                  <label style={{ display: 'block', marginBottom: 10, fontSize: 15, fontWeight: 500, color: t.text }}>Amount ($)</label>
+                  <input
+                    type="number"
+                    placeholder="How much to invest"
+                    value={orderAmount}
+                    onChange={e => setOrderAmount(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '14px 18px',
+                      borderRadius: 12,
+                      border: `2px solid ${t.inputBorder}`,
+                      fontFamily: 'inherit',
+                      background: t.input,
+                      color: t.text,
+                      fontSize: 16,
+                      boxSizing: 'border-box'
+                    }}
+                  />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={createOrder} style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  boxShadow: '0 4px 12px rgba(139, 92, 246, 0.3)',
+                  transition: 'all 0.2s'
+                }}>
+                  Create Order
+                </button>
+                <button onClick={() => {
+                  setShowOrderModal(false)
+                  setOrderPrice('')
+                  setOrderAmount('')
+                }} style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: 'transparent',
+                  color: t.text,
+                  border: `2px solid ${t.border}`,
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  transition: 'all 0.2s'
+                }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 24, marginBottom: 48 }}>
           <div style={{
@@ -593,7 +1015,7 @@ export default function Dashboard() {
           gap: 8,
           boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 4px rgba(0, 0, 0, 0.04)'
         }}>
-          {(['market', 'history', 'advisor'] as const).map(tabName => (
+          {(['market', 'history', 'analytics', 'advisor'] as const).map(tabName => (
             <button key={tabName} onClick={() => setTab(tabName)}
               style={{
                 flex: 1,
@@ -609,13 +1031,75 @@ export default function Dashboard() {
                 transition: 'all 0.2s',
                 boxShadow: tab === tabName ? '0 2px 8px rgba(102, 126, 234, 0.3)' : 'none'
               }}>
-              {tabName === 'market' ? '📊 Market' : tabName === 'history' ? '📋 History' : '🤖 AI Advisor'}
+              {tabName === 'market' ? '📊 Market' : tabName === 'history' ? '📋 History' : tabName === 'analytics' ? '📈 Analytics' : '🤖 AI Advisor'}
             </button>
           ))}
         </div>
 
         {tab === 'market' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 36 }}>
+          <div>
+            {/* Pending Orders Section */}
+            {pendingOrders.length > 0 && (
+              <div style={{
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                padding: 24,
+                borderRadius: 18,
+                marginBottom: 28,
+                boxShadow: '0 4px 16px rgba(139, 92, 246, 0.3)',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: 20, fontWeight: 700, color: 'white' }}>
+                  ⏱️ Pending Orders ({pendingOrders.length})
+                </h3>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {pendingOrders.map(order => (
+                    <div key={order.id} style={{
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      backdropFilter: 'blur(10px)',
+                      padding: '16px 20px',
+                      borderRadius: 12,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      border: '1px solid rgba(255, 255, 255, 0.2)'
+                    }}>
+                      <div>
+                        <span style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>{order.ticker}</span>
+                        <span style={{ margin: '0 12px', color: 'rgba(255, 255, 255, 0.8)' }}>
+                          {order.order_type === 'LIMIT_BUY' ? '📥 Buy' : order.order_type === 'LIMIT_SELL' ? '📤 Sell' : '🛑 Stop-Loss'}
+                        </span>
+                        <span style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: 15 }}>
+                          {order.order_type === 'LIMIT_BUY' && `when ≤ $${formatCurrency(order.target_price)}`}
+                          {order.order_type === 'LIMIT_SELL' && `when ≥ $${formatCurrency(order.target_price)}`}
+                          {order.order_type === 'STOP_LOSS' && `when ≤ $${formatCurrency(order.target_price)}`}
+                        </span>
+                        {order.order_type === 'LIMIT_BUY' && (
+                          <span style={{ marginLeft: 12, color: 'rgba(255, 255, 255, 0.7)', fontSize: 14 }}>
+                            (${formatCurrency(order.amount)})
+                          </span>
+                        )}
+                      </div>
+                      <button onClick={() => cancelOrder(order.id)} style={{
+                        padding: '8px 16px',
+                        background: 'rgba(239, 68, 68, 0.9)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: 14,
+                        fontWeight: 600,
+                        transition: 'all 0.2s'
+                      }}>
+                        Cancel
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 36 }}>
             <div>
               <h2 style={{ marginBottom: 24, fontSize: 24, fontWeight: 700 }}>🔍 Find a Stock</h2>
               <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
@@ -651,8 +1135,13 @@ export default function Dashboard() {
                 </button>
               </div>
 
+              <div style={{ marginBottom: 16 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 600, marginBottom: 12, color: t.subtext }}>
+                  {watchlist.length > 0 ? '⭐ My Watchlist' : '🔥 Popular Stocks'}
+                </h3>
+              </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 24 }}>
-                {POPULAR.map(ticker => (
+                {(watchlist.length > 0 ? watchlist : POPULAR).map(ticker => (
                   <button key={ticker} onClick={async () => {
                     setSearchTicker(ticker)
                     setSearchLoading(true)
@@ -666,18 +1155,22 @@ export default function Dashboard() {
                     setSearchLoading(false)
                   }} style={{
                     padding: '8px 16px',
-                    background: t.card,
-                    border: `2px solid ${t.border}`,
+                    background: watchlist.includes(ticker)
+                      ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'
+                      : t.card,
+                    border: watchlist.includes(ticker) ? 'none' : `2px solid ${t.border}`,
                     borderRadius: 20,
                     cursor: 'pointer',
                     fontFamily: 'inherit',
                     fontSize: 14,
                     fontWeight: 500,
-                    color: t.text,
+                    color: watchlist.includes(ticker) ? 'white' : t.text,
                     transition: 'all 0.2s',
-                    boxShadow: darkMode ? '0 1px 4px rgba(0, 0, 0, 0.2)' : 'none'
+                    boxShadow: watchlist.includes(ticker)
+                      ? '0 2px 8px rgba(245, 158, 11, 0.3)'
+                      : (darkMode ? '0 1px 4px rgba(0, 0, 0, 0.2)' : 'none')
                   }}>
-                    {ticker}
+                    {watchlist.includes(ticker) ? '⭐ ' : ''}{ticker}
                   </button>
                 ))}
               </div>
@@ -772,6 +1265,42 @@ export default function Dashboard() {
                       Sell All {selectedStock.ticker}
                     </button>
                   )}
+                  <button onClick={() => watchlist.includes(selectedStock.ticker)
+                      ? removeFromWatchlist(selectedStock.ticker)
+                      : addToWatchlist(selectedStock.ticker)}
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      background: 'transparent',
+                      color: watchlist.includes(selectedStock.ticker) ? '#f59e0b' : t.text,
+                      border: `2px solid ${watchlist.includes(selectedStock.ticker) ? '#f59e0b' : t.border}`,
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      fontSize: 15,
+                      fontWeight: 600,
+                      marginTop: 12,
+                      transition: 'all 0.2s'
+                    }}>
+                    {watchlist.includes(selectedStock.ticker) ? '⭐ Remove from Watchlist' : '☆ Add to Watchlist'}
+                  </button>
+                  <button onClick={() => setShowOrderModal(true)}
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      background: 'transparent',
+                      color: '#8b5cf6',
+                      border: '2px solid #8b5cf6',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      fontSize: 15,
+                      fontWeight: 600,
+                      marginTop: 12,
+                      transition: 'all 0.2s'
+                    }}>
+                    ⏱️ Create Limit Order
+                  </button>
                 </div>
               )}
             </div>
@@ -915,6 +1444,7 @@ export default function Dashboard() {
                 )
               })}
             </div>
+          </div>
           </div>
         )}
 
@@ -1184,6 +1714,115 @@ export default function Dashboard() {
                 }}>
                 Send
               </button>
+            </div>
+          </div>
+        )}
+
+        {tab === 'analytics' && (
+          <div>
+            <div style={{ marginBottom: 36 }}>
+              <h2 style={{ marginBottom: 10, fontSize: 24, fontWeight: 700 }}>📈 Portfolio Analytics</h2>
+              <p style={{ color: t.subtext, fontSize: 15, margin: 0 }}>Visualize your performance and holdings</p>
+            </div>
+
+            {/* Portfolio Performance Over Time */}
+            <div style={{
+              background: t.card,
+              padding: 32,
+              borderRadius: 18,
+              border: `1px solid ${t.border}`,
+              boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)',
+              marginBottom: 28
+            }}>
+              <h3 style={{ margin: '0 0 20px 0', fontSize: 20, fontWeight: 600 }}>Portfolio Value Over Time</h3>
+              <PortfolioChart
+                data={portfolioSnapshots.map(s => ({
+                  date: new Date(s.created_at).toLocaleDateString(),
+                  value: parseFloat(s.portfolio_value),
+                  timestamp: new Date(s.created_at).getTime()
+                }))}
+                darkMode={darkMode}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 28, marginBottom: 28 }}>
+              {/* Stock Performance */}
+              <div style={{
+                background: t.card,
+                padding: 32,
+                borderRadius: 18,
+                border: `1px solid ${t.border}`,
+                boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)'
+              }}>
+                <h3 style={{ margin: '0 0 20px 0', fontSize: 20, fontWeight: 600 }}>Gains & Losses by Stock</h3>
+                <StockPerformanceChart
+                  holdings={getAllHeldTickers().map(ticker => {
+                    const holding = getHolding(ticker)!
+                    const currentPrice = livePrices[ticker] || holding.avgPrice
+                    const gain = (holding.shares * currentPrice) - (holding.shares * holding.avgPrice)
+                    return { ticker, gain, shares: holding.shares }
+                  })}
+                  darkMode={darkMode}
+                />
+              </div>
+
+              {/* Portfolio Composition */}
+              <div style={{
+                background: t.card,
+                padding: 32,
+                borderRadius: 18,
+                border: `1px solid ${t.border}`,
+                boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)'
+              }}>
+                <h3 style={{ margin: '0 0 20px 0', fontSize: 20, fontWeight: 600 }}>Portfolio Composition</h3>
+                <PortfolioComposition
+                  holdings={getAllHeldTickers().map(ticker => {
+                    const holding = getHolding(ticker)!
+                    const currentPrice = livePrices[ticker] || holding.avgPrice
+                    return { ticker, currentValue: holding.shares * currentPrice }
+                  })}
+                  cash={portfolio?.cash || 0}
+                  darkMode={darkMode}
+                />
+              </div>
+            </div>
+
+            {/* Performance Stats */}
+            <div style={{
+              background: t.card,
+              padding: 32,
+              borderRadius: 18,
+              border: `1px solid ${t.border}`,
+              boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)'
+            }}>
+              <h3 style={{ margin: '0 0 24px 0', fontSize: 20, fontWeight: 600 }}>Performance Statistics</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
+                <div>
+                  <p style={{ color: t.subtext, margin: '0 0 8px 0', fontSize: 14, fontWeight: 500 }}>Total Trades</p>
+                  <p style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>{tradeHistory.length}</p>
+                </div>
+                <div>
+                  <p style={{ color: t.subtext, margin: '0 0 8px 0', fontSize: 14, fontWeight: 500 }}>Winning Trades</p>
+                  <p style={{ fontSize: 28, fontWeight: 700, margin: 0, color: '#10b981' }}>
+                    {tradeHistory.filter(t => t.profit_loss && parseFloat(t.profit_loss) > 0).length}
+                  </p>
+                </div>
+                <div>
+                  <p style={{ color: t.subtext, margin: '0 0 8px 0', fontSize: 14, fontWeight: 500 }}>Losing Trades</p>
+                  <p style={{ fontSize: 28, fontWeight: 700, margin: 0, color: '#ef4444' }}>
+                    {tradeHistory.filter(t => t.profit_loss && parseFloat(t.profit_loss) < 0).length}
+                  </p>
+                </div>
+                <div>
+                  <p style={{ color: t.subtext, margin: '0 0 8px 0', fontSize: 14, fontWeight: 500 }}>Win Rate</p>
+                  <p style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>
+                    {tradeHistory.filter(t => t.profit_loss !== null).length > 0
+                      ? ((tradeHistory.filter(t => t.profit_loss && parseFloat(t.profit_loss) > 0).length /
+                        tradeHistory.filter(t => t.profit_loss !== null).length) * 100).toFixed(1) + '%'
+                      : '—'}
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}

@@ -5,7 +5,6 @@ export async function POST(req: NextRequest) {
     const { message, portfolio } = await req.json()
 
     const apiKey = process.env.GROQ_API_KEY
-    console.log('API KEY:', apiKey ? 'found' : 'MISSING')
     if (!apiKey) {
       return NextResponse.json({ error: 'API key not configured' }, { status: 500 })
     }
@@ -46,7 +45,6 @@ IMPORTANT:
     })
 
     const data = await response.json()
-    console.log('RESPONSE:', JSON.stringify(data))
     const text = data.choices?.[0]?.message?.content || 'Sorry, I could not generate a response.'
     return NextResponse.json({ reply: text })
   } catch (err) {
