@@ -71,6 +71,11 @@ export default function Dashboard() {
   const [orderType, setOrderType] = useState<'LIMIT_BUY' | 'LIMIT_SELL' | 'STOP_LOSS'>('LIMIT_BUY')
   const [orderPrice, setOrderPrice] = useState('')
   const [orderAmount, setOrderAmount] = useState('')
+  const [priceAlerts, setPriceAlerts] = useState<any[]>([])
+  const [notifications, setNotifications] = useState<any[]>([])
+  const [showAlertModal, setShowAlertModal] = useState(false)
+  const [alertType, setAlertType] = useState<'ABOVE' | 'BELOW'>('ABOVE')
+  const [alertPrice, setAlertPrice] = useState('')
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const t = {
@@ -144,6 +149,25 @@ export default function Dashboard() {
         .eq('status', 'PENDING')
         .order('created_at', { ascending: false })
       setPendingOrders(ordersData || [])
+
+      // Fetch price alerts
+      const { data: alertsData } = await supabase
+        .from('price_alerts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false })
+      setPriceAlerts(alertsData || [])
+
+      // Fetch unread notifications
+      const { data: notificationsData } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_read', false)
+        .order('created_at', { ascending: false })
+        .limit(10)
+      setNotifications(notificationsData || [])
 
       setLoading(false)
 
@@ -411,6 +435,109 @@ export default function Dashboard() {
     setPendingOrders(ordersData || [])
   }
 
+  async function createPriceAlert() {
+    if (!selectedStock || !alertPrice) {
+      setMessage('Please enter a target price')
+      return
+    }
+
+    const targetPrice = parseFloat(alertPrice)
+    if (isNaN(targetPrice) || targetPrice <= 0) {
+      setMessage('Please enter a valid price')
+      return
+    }
+
+    await supabase.from('price_alerts').insert({
+      user_id: user.id,
+      ticker: selectedStock.ticker,
+      target_price: targetPrice,
+      alert_type: alertType,
+      is_active: true
+    })
+
+    // Refresh alerts
+    const { data: alertsData } = await supabase
+      .from('price_alerts')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+    setPriceAlerts(alertsData || [])
+
+    setShowAlertModal(false)
+    setAlertPrice('')
+    setMessage(`✅ Price alert created: Notify when ${selectedStock.ticker} goes ${alertType === 'ABOVE' ? 'above' : 'below'} $${targetPrice.toFixed(2)}`)
+  }
+
+  async function deleteAlert(alertId: string) {
+    await supabase
+      .from('price_alerts')
+      .update({ is_active: false })
+      .eq('id', alertId)
+
+    setPriceAlerts(prev => prev.filter(a => a.id !== alertId))
+    setMessage('Alert deleted')
+  }
+
+  async function markNotificationRead(notificationId: string) {
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('id', notificationId)
+
+    setNotifications(prev => prev.filter(n => n.id !== notificationId))
+  }
+
+  async function markAllNotificationsRead() {
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('user_id', user.id)
+      .eq('is_read', false)
+
+    setNotifications([])
+  }
+
+  async function checkPriceAlerts() {
+    if (!user) return
+
+    // Get prices for all tickers with alerts
+    const alertTickers = [...new Set(priceAlerts.map(a => a.ticker))]
+    const prices: Record<string, number> = {}
+
+    for (const ticker of alertTickers) {
+      const result = await searchStock(ticker)
+      if (!result.error && result.price) {
+        prices[ticker] = result.price
+      }
+    }
+
+    // Call API to check and trigger alerts
+    await fetch('/api/check-alerts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.id, currentPrices: prices })
+    })
+
+    // Refresh alerts and notifications
+    const { data: alertsData } = await supabase
+      .from('price_alerts')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false })
+    setPriceAlerts(alertsData || [])
+
+    const { data: notificationsData } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('user_id', user.id)
+      .eq('is_read', false)
+      .order('created_at', { ascending: false })
+      .limit(10)
+    setNotifications(notificationsData || [])
+  }
+
   async function handleRefreshPrices() {
     setRefreshingPrices(true)
     setMessage('')
@@ -435,6 +562,9 @@ export default function Dashboard() {
 
     // Check and execute any pending orders
     await checkAndExecuteOrders()
+
+    // Check price alerts
+    await checkPriceAlerts()
   }
 
   async function handleBuy() {
@@ -678,6 +808,73 @@ export default function Dashboard() {
             boxShadow: '0 2px 8px rgba(16, 185, 129, 0.1)'
           }}>
             {message}
+          </div>
+        )}
+
+        {/* Notifications */}
+        {notifications.length > 0 && (
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
+                🔔 Notifications ({notifications.length})
+              </h3>
+              <button onClick={markAllNotificationsRead} style={{
+                padding: '8px 16px',
+                background: 'transparent',
+                color: t.subtext,
+                border: `1px solid ${t.border}`,
+                borderRadius: 8,
+                cursor: 'pointer',
+                fontSize: 13,
+                fontWeight: 500
+              }}>
+                Mark all as read
+              </button>
+            </div>
+            {notifications.map(notif => (
+              <div key={notif.id} style={{
+                background: notif.type === 'PRICE_ALERT'
+                  ? (darkMode ? 'rgba(245, 158, 11, 0.1)' : '#fef3c7')
+                  : (darkMode ? 'rgba(59, 130, 246, 0.1)' : '#dbeafe'),
+                border: `2px solid ${notif.type === 'PRICE_ALERT' ? (darkMode ? '#f59e0b' : '#fbbf24') : (darkMode ? '#3b82f6' : '#60a5fa')}`,
+                padding: '16px 24px',
+                borderRadius: 14,
+                marginBottom: 12,
+                fontSize: 15,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+              }}>
+                <div>
+                  <p style={{
+                    margin: '0 0 4px 0',
+                    fontWeight: 700,
+                    color: notif.type === 'PRICE_ALERT' ? (darkMode ? '#fbbf24' : '#d97706') : (darkMode ? '#60a5fa' : '#2563eb')
+                  }}>
+                    {notif.title}
+                  </p>
+                  <p style={{
+                    margin: 0,
+                    color: t.text
+                  }}>
+                    {notif.message}
+                  </p>
+                </div>
+                <button onClick={() => markNotificationRead(notif.id)} style={{
+                  padding: '6px 12px',
+                  background: 'transparent',
+                  color: t.subtext,
+                  border: `1px solid ${t.border}`,
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: 500
+                }}>
+                  Dismiss
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
@@ -945,6 +1142,119 @@ export default function Dashboard() {
           </div>
         )}
 
+        {/* Price Alert Modal */}
+        {showAlertModal && selectedStock && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.6)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '20px'
+          }} onClick={() => setShowAlertModal(false)}>
+            <div style={{
+              background: darkMode ? '#1a1a2e' : '#ffffff',
+              borderRadius: 20,
+              padding: '40px',
+              maxWidth: 500,
+              width: '100%',
+              boxShadow: '0 20px 60px rgba(0, 0, 0, 0.3)',
+              border: `1px solid ${t.border}`
+            }} onClick={e => e.stopPropagation()}>
+              <h2 style={{ margin: '0 0 10px 0', fontSize: 28, fontWeight: 700 }}>🔔 Create Price Alert</h2>
+              <p style={{ color: t.subtext, margin: '0 0 28px 0', fontSize: 15 }}>
+                Get notified when {selectedStock.ticker} reaches your target price (Current: ${formatCurrency(selectedStock.price || 0)})
+              </p>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 10, fontSize: 15, fontWeight: 500, color: t.text }}>Alert Type</label>
+                <select
+                  value={alertType}
+                  onChange={e => setAlertType(e.target.value as any)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 18px',
+                    borderRadius: 12,
+                    border: `2px solid ${t.inputBorder}`,
+                    fontFamily: 'inherit',
+                    background: t.input,
+                    color: t.text,
+                    fontSize: 16,
+                    boxSizing: 'border-box'
+                  }}
+                >
+                  <option value="ABOVE">Alert when price goes above target</option>
+                  <option value="BELOW">Alert when price goes below target</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', marginBottom: 10, fontSize: 15, fontWeight: 500, color: t.text }}>Target Price</label>
+                <input
+                  type="number"
+                  placeholder="Enter target price"
+                  value={alertPrice}
+                  onChange={e => setAlertPrice(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '14px 18px',
+                    borderRadius: 12,
+                    border: `2px solid ${t.inputBorder}`,
+                    fontFamily: 'inherit',
+                    background: t.input,
+                    color: t.text,
+                    fontSize: 16,
+                    boxSizing: 'border-box'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', gap: 12 }}>
+                <button onClick={createPriceAlert} style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  boxShadow: '0 4px 12px rgba(245, 158, 11, 0.3)',
+                  transition: 'all 0.2s'
+                }}>
+                  Create Alert
+                </button>
+                <button onClick={() => {
+                  setShowAlertModal(false)
+                  setAlertPrice('')
+                }} style={{
+                  flex: 1,
+                  padding: '14px',
+                  background: 'transparent',
+                  color: t.text,
+                  border: `2px solid ${t.border}`,
+                  borderRadius: 12,
+                  cursor: 'pointer',
+                  fontFamily: 'inherit',
+                  fontSize: 16,
+                  fontWeight: 600,
+                  transition: 'all 0.2s'
+                }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 24, marginBottom: 48 }}>
           <div style={{
@@ -1092,6 +1402,60 @@ export default function Dashboard() {
                         transition: 'all 0.2s'
                       }}>
                         Cancel
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Price Alerts Section */}
+            {priceAlerts.length > 0 && (
+              <div style={{
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                padding: 24,
+                borderRadius: 18,
+                marginBottom: 28,
+                boxShadow: '0 4px 16px rgba(245, 158, 11, 0.3)',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <h3 style={{ margin: '0 0 16px 0', fontSize: 20, fontWeight: 700, color: 'white' }}>
+                  🔔 Active Price Alerts ({priceAlerts.length})
+                </h3>
+                <div style={{ display: 'grid', gap: 12 }}>
+                  {priceAlerts.map(alert => (
+                    <div key={alert.id} style={{
+                      background: 'rgba(255, 255, 255, 0.15)',
+                      backdropFilter: 'blur(10px)',
+                      padding: '16px 20px',
+                      borderRadius: 12,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      border: '1px solid rgba(255, 255, 255, 0.2)'
+                    }}>
+                      <div>
+                        <span style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>{alert.ticker}</span>
+                        <span style={{ margin: '0 12px', color: 'rgba(255, 255, 255, 0.8)' }}>
+                          {alert.alert_type === 'ABOVE' ? '📈 Alert Above' : '📉 Alert Below'}
+                        </span>
+                        <span style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: 15 }}>
+                          ${formatCurrency(parseFloat(alert.target_price))}
+                        </span>
+                      </div>
+                      <button onClick={() => deleteAlert(alert.id)} style={{
+                        padding: '8px 16px',
+                        background: 'rgba(239, 68, 68, 0.9)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        fontFamily: 'inherit',
+                        fontSize: 14,
+                        fontWeight: 600,
+                        transition: 'all 0.2s'
+                      }}>
+                        Delete
                       </button>
                     </div>
                   ))}
@@ -1300,6 +1664,23 @@ export default function Dashboard() {
                       transition: 'all 0.2s'
                     }}>
                     ⏱️ Create Limit Order
+                  </button>
+                  <button onClick={() => setShowAlertModal(true)}
+                    style={{
+                      width: '100%',
+                      padding: '14px',
+                      background: 'transparent',
+                      color: '#f59e0b',
+                      border: '2px solid #f59e0b',
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      fontFamily: 'inherit',
+                      fontSize: 15,
+                      fontWeight: 600,
+                      marginTop: 12,
+                      transition: 'all 0.2s'
+                    }}>
+                    🔔 Set Price Alert
                   </button>
                 </div>
               )}
