@@ -5,7 +5,6 @@ import { searchStock } from '../../lib/stocks'
 import PortfolioChart from '../../components/PortfolioChart'
 import StockPerformanceChart from '../../components/StockPerformanceChart'
 import PortfolioComposition from '../../components/PortfolioComposition'
-import StockDetailChart from '../../components/StockDetailChart'
 
 // Helper function to format currency with commas
 function formatCurrency(amount: number): string {
@@ -1961,9 +1960,6 @@ export default function Dashboard() {
                     🔔 Set Price Alert
                   </button>
                 </div>
-                {tradeHistory.some(t => t.ticker === selectedStock.ticker) && (
-                  <StockDetailChart ticker={selectedStock.ticker} trades={tradeHistory} darkMode={darkMode} />
-                )}
               )}
             </div>
 
