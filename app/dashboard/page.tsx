@@ -739,7 +739,7 @@ export default function Dashboard() {
   const POPULAR = ['AAPL', 'TSLA', 'NVDA', 'MSFT', 'AMZN', 'META', 'GOOGL', 'NFLX', 'SHOP', 'UBER', 'AMD', 'COIN', 'SPY', 'QQQ']
 
   return (
-    <div style={{ background: darkMode ? '#0f0f1e' : '#f5f7fa', minHeight: '100vh', color: t.text }}>
+    <div style={{ background: darkMode ? '#0a0a15' : '#f8fafc', minHeight: '100vh', color: t.text }}>
       <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif', padding: '48px 60px', maxWidth: 1400, margin: '0 auto' }}>
 
         {/* Header */}
@@ -748,48 +748,86 @@ export default function Dashboard() {
           justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 48,
-          padding: '28px 36px',
-          background: t.card,
-          borderRadius: 20,
-          boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)',
-          border: `1px solid ${t.border}`
+          padding: '32px 40px',
+          background: darkMode ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' : '#ffffff',
+          borderRadius: 24,
+          boxShadow: darkMode ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 4px 20px rgba(0, 0, 0, 0.08)',
+          border: `1px solid ${darkMode ? 'rgba(102, 126, 234, 0.2)' : '#e2e8f0'}`,
+          transition: 'transform 0.2s, box-shadow 0.2s'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'translateY(-2px)'
+          e.currentTarget.style.boxShadow = darkMode ? '0 12px 40px rgba(0, 0, 0, 0.6)' : '0 8px 30px rgba(0, 0, 0, 0.12)'
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'translateY(0)'
+          e.currentTarget.style.boxShadow = darkMode ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 4px 20px rgba(0, 0, 0, 0.08)'
         }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 32, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 14 }}>
-              <span>📈</span>
+            <h1 style={{
+              margin: 0,
+              fontSize: 36,
+              fontWeight: 800,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 16,
+              background: darkMode ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              backgroundClip: 'text'
+            }}>
+              <span style={{ fontSize: 40 }}>📈</span>
               <span>Stock Simulator</span>
             </h1>
-            <p style={{ margin: '6px 0 0 0', color: t.subtext, fontSize: 16 }}>{user.email}</p>
+            <p style={{ margin: '8px 0 0 0', color: t.subtext, fontSize: 15, fontWeight: 500 }}>{user.email}</p>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button onClick={() => setDarkMode(!darkMode)}
               style={{
-                padding: '12px 22px',
+                padding: '14px 24px',
                 cursor: 'pointer',
-                background: darkMode ? '#fff' : '#1a202c',
-                color: darkMode ? '#1a202c' : '#fff',
+                background: darkMode ? 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)' : 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+                color: '#fff',
                 border: 'none',
-                borderRadius: 12,
+                borderRadius: 14,
                 fontFamily: 'inherit',
                 fontSize: 15,
-                fontWeight: 500,
+                fontWeight: 600,
                 transition: 'all 0.2s',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                boxShadow: darkMode ? '0 4px 12px rgba(251, 191, 36, 0.4)' : '0 4px 12px rgba(0, 0, 0, 0.3)'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateY(-2px)'
+                e.currentTarget.style.boxShadow = darkMode ? '0 6px 20px rgba(251, 191, 36, 0.5)' : '0 6px 20px rgba(0, 0, 0, 0.4)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateY(0)'
+                e.currentTarget.style.boxShadow = darkMode ? '0 4px 12px rgba(251, 191, 36, 0.4)' : '0 4px 12px rgba(0, 0, 0, 0.3)'
               }}>
               {darkMode ? '☀️ Light' : '🌙 Dark'}
             </button>
             <button onClick={handleLogout}
               style={{
-                padding: '12px 22px',
+                padding: '14px 24px',
                 cursor: 'pointer',
                 background: 'transparent',
-                border: `2px solid ${t.border}`,
+                border: `2px solid ${darkMode ? 'rgba(102, 126, 234, 0.4)' : '#cbd5e1'}`,
                 color: t.text,
-                borderRadius: 12,
+                borderRadius: 14,
                 fontFamily: 'inherit',
                 fontSize: 15,
-                fontWeight: 500,
+                fontWeight: 600,
                 transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = darkMode ? 'rgba(102, 126, 234, 0.1)' : '#f1f5f9'
+                e.currentTarget.style.borderColor = darkMode ? 'rgba(102, 126, 234, 0.6)' : '#94a3b8'
+                e.currentTarget.style.transform = 'translateY(-2px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.borderColor = darkMode ? 'rgba(102, 126, 234, 0.4)' : '#cbd5e1'
+                e.currentTarget.style.transform = 'translateY(0)'
               }}>
               Logout
             </button>
@@ -798,35 +836,61 @@ export default function Dashboard() {
 
         {message && (
           <div style={{
-            background: darkMode ? 'rgba(16, 185, 129, 0.1)' : '#ecfdf5',
+            background: darkMode ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.1) 100%)' : 'linear-gradient(135deg, #d1fae5 0%, #ecfdf5 100%)',
             border: `2px solid ${darkMode ? '#10b981' : '#6ee7b7'}`,
-            padding: '16px 24px',
-            borderRadius: 14,
-            marginBottom: 28,
+            padding: '18px 28px',
+            borderRadius: 16,
+            marginBottom: 32,
             fontSize: 16,
+            fontWeight: 600,
             color: darkMode ? '#6ee7b7' : '#047857',
-            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.1)'
+            boxShadow: darkMode ? '0 4px 20px rgba(16, 185, 129, 0.25)' : '0 4px 20px rgba(16, 185, 129, 0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+            animation: 'slideDown 0.3s ease-out'
           }}>
-            {message}
+            <span style={{ fontSize: 20 }}>✓</span>
+            <span>{message}</span>
           </div>
         )}
 
         {/* Notifications */}
         {notifications.length > 0 && (
-          <div style={{ marginBottom: 28 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>
-                🔔 Notifications ({notifications.length})
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 24 }}>🔔</span>
+                <span>Notifications</span>
+                <span style={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  padding: '4px 12px',
+                  borderRadius: 20,
+                  fontSize: 14,
+                  fontWeight: 700
+                }}>
+                  {notifications.length}
+                </span>
               </h3>
               <button onClick={markAllNotificationsRead} style={{
-                padding: '8px 16px',
+                padding: '10px 20px',
                 background: 'transparent',
                 color: t.subtext,
-                border: `1px solid ${t.border}`,
-                borderRadius: 8,
+                border: `2px solid ${darkMode ? 'rgba(102, 126, 234, 0.3)' : '#cbd5e1'}`,
+                borderRadius: 12,
                 cursor: 'pointer',
-                fontSize: 13,
-                fontWeight: 500
+                fontSize: 14,
+                fontWeight: 600,
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = darkMode ? 'rgba(102, 126, 234, 0.1)' : '#f1f5f9'
+                e.currentTarget.style.borderColor = darkMode ? 'rgba(102, 126, 234, 0.5)' : '#94a3b8'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.borderColor = darkMode ? 'rgba(102, 126, 234, 0.3)' : '#cbd5e1'
               }}>
                 Mark all as read
               </button>
@@ -834,42 +898,66 @@ export default function Dashboard() {
             {notifications.map(notif => (
               <div key={notif.id} style={{
                 background: notif.type === 'PRICE_ALERT'
-                  ? (darkMode ? 'rgba(245, 158, 11, 0.1)' : '#fef3c7')
-                  : (darkMode ? 'rgba(59, 130, 246, 0.1)' : '#dbeafe'),
-                border: `2px solid ${notif.type === 'PRICE_ALERT' ? (darkMode ? '#f59e0b' : '#fbbf24') : (darkMode ? '#3b82f6' : '#60a5fa')}`,
-                padding: '16px 24px',
-                borderRadius: 14,
+                  ? (darkMode ? 'linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, rgba(217, 119, 6, 0.1) 100%)' : 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)')
+                  : (darkMode ? 'linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(37, 99, 235, 0.1) 100%)' : 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)'),
+                border: `2px solid ${notif.type === 'PRICE_ALERT' ? (darkMode ? 'rgba(251, 191, 36, 0.4)' : '#fbbf24') : (darkMode ? 'rgba(96, 165, 250, 0.4)' : '#60a5fa')}`,
+                padding: '18px 24px',
+                borderRadius: 16,
                 marginBottom: 12,
                 fontSize: 15,
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+                boxShadow: notif.type === 'PRICE_ALERT'
+                  ? (darkMode ? '0 4px 16px rgba(245, 158, 11, 0.2)' : '0 4px 16px rgba(245, 158, 11, 0.15)')
+                  : (darkMode ? '0 4px 16px rgba(59, 130, 246, 0.2)' : '0 4px 16px rgba(59, 130, 246, 0.15)'),
+                transition: 'all 0.2s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.transform = 'translateX(8px)'
+                e.currentTarget.style.borderWidth = '3px'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.transform = 'translateX(0)'
+                e.currentTarget.style.borderWidth = '2px'
               }}>
                 <div>
                   <p style={{
-                    margin: '0 0 4px 0',
+                    margin: '0 0 6px 0',
                     fontWeight: 700,
+                    fontSize: 16,
                     color: notif.type === 'PRICE_ALERT' ? (darkMode ? '#fbbf24' : '#d97706') : (darkMode ? '#60a5fa' : '#2563eb')
                   }}>
                     {notif.title}
                   </p>
                   <p style={{
                     margin: 0,
-                    color: t.text
+                    color: t.text,
+                    fontWeight: 500
                   }}>
                     {notif.message}
                   </p>
                 </div>
                 <button onClick={() => markNotificationRead(notif.id)} style={{
-                  padding: '6px 12px',
+                  padding: '8px 16px',
                   background: 'transparent',
                   color: t.subtext,
-                  border: `1px solid ${t.border}`,
-                  borderRadius: 6,
+                  border: `2px solid ${darkMode ? 'rgba(148, 163, 184, 0.3)' : '#cbd5e1'}`,
+                  borderRadius: 10,
                   cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: 500
+                  fontSize: 13,
+                  fontWeight: 600,
+                  transition: 'all 0.2s'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = darkMode ? 'rgba(239, 68, 68, 0.2)' : '#fee2e2'
+                  e.currentTarget.style.borderColor = '#ef4444'
+                  e.currentTarget.style.color = '#ef4444'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.borderColor = darkMode ? 'rgba(148, 163, 184, 0.3)' : '#cbd5e1'
+                  e.currentTarget.style.color = t.subtext
                 }}>
                   Dismiss
                 </button>
@@ -880,19 +968,31 @@ export default function Dashboard() {
 
         <button onClick={() => setShowDepositModal(true)} style={{
           marginBottom: 40,
-          padding: '14px 28px',
+          padding: '16px 32px',
           background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
           color: 'white',
           border: 'none',
-          borderRadius: 12,
+          borderRadius: 16,
           cursor: 'pointer',
           fontFamily: 'inherit',
-          fontSize: 16,
-          fontWeight: 600,
-          boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
-          transition: 'all 0.2s'
+          fontSize: 17,
+          fontWeight: 700,
+          boxShadow: '0 8px 24px rgba(102, 126, 234, 0.4)',
+          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 10
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'translateY(-4px) scale(1.05)'
+          e.currentTarget.style.boxShadow = '0 12px 32px rgba(102, 126, 234, 0.5)'
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'translateY(0) scale(1)'
+          e.currentTarget.style.boxShadow = '0 8px 24px rgba(102, 126, 234, 0.4)'
         }}>
-          💰 Deposit Funds
+          <span style={{ fontSize: 20 }}>💰</span>
+          <span>Deposit Funds</span>
         </button>
 
         {/* Deposit Modal */}
@@ -1256,58 +1356,115 @@ export default function Dashboard() {
         )}
 
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 24, marginBottom: 48 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20, marginBottom: 48 }}>
           <div style={{
-            background: t.card,
-            padding: 28,
-            borderRadius: 18,
-            border: `1px solid ${t.border}`,
-            boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)',
-            transition: 'transform 0.2s',
+            background: darkMode ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : '#ffffff',
+            padding: 32,
+            borderRadius: 20,
+            border: `1px solid ${darkMode ? 'rgba(59, 130, 246, 0.2)' : '#e2e8f0'}`,
+            boxShadow: darkMode ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 4px 20px rgba(0, 0, 0, 0.08)',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            cursor: 'pointer',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'
+            e.currentTarget.style.boxShadow = darkMode ? '0 12px 48px rgba(59, 130, 246, 0.3)' : '0 12px 40px rgba(59, 130, 246, 0.15)'
+            e.currentTarget.style.borderColor = darkMode ? 'rgba(59, 130, 246, 0.5)' : '#3b82f6'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0) scale(1)'
+            e.currentTarget.style.boxShadow = darkMode ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 4px 20px rgba(0, 0, 0, 0.08)'
+            e.currentTarget.style.borderColor = darkMode ? 'rgba(59, 130, 246, 0.2)' : '#e2e8f0'
           }}>
-            <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 15, fontWeight: 500 }}>💰 Cash Available</p>
-            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${formatCurrency(portfolio?.cash || 0)}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <span style={{ fontSize: 32 }}>💰</span>
+              <p style={{ color: t.subtext, margin: 0, fontSize: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cash Available</p>
+            </div>
+            <p style={{ fontSize: 36, fontWeight: 800, margin: 0, color: t.text, letterSpacing: '-0.5px' }}>${formatCurrency(portfolio?.cash || 0)}</p>
           </div>
           <div style={{
-            background: t.card,
-            padding: 28,
-            borderRadius: 18,
-            border: `1px solid ${t.border}`,
-            boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)',
-            transition: 'transform 0.2s',
+            background: darkMode ? 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)' : 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%)',
+            padding: 32,
+            borderRadius: 20,
+            border: `1px solid ${darkMode ? 'rgba(167, 139, 250, 0.3)' : 'rgba(255, 255, 255, 0.4)'}`,
+            boxShadow: '0 8px 32px rgba(124, 58, 237, 0.4)',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            cursor: 'pointer',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'
+            e.currentTarget.style.boxShadow = '0 16px 48px rgba(124, 58, 237, 0.5)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0) scale(1)'
+            e.currentTarget.style.boxShadow = '0 8px 32px rgba(124, 58, 237, 0.4)'
           }}>
-            <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 15, fontWeight: 500 }}>📊 Portfolio Value</p>
-            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${formatCurrency(portfolioValue)}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <span style={{ fontSize: 32 }}>📊</span>
+              <p style={{ color: 'rgba(255, 255, 255, 0.9)', margin: 0, fontSize: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Portfolio Value</p>
+            </div>
+            <p style={{ fontSize: 36, fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '-0.5px' }}>${formatCurrency(portfolioValue)}</p>
           </div>
           <div style={{
-            background: t.card,
-            padding: 28,
-            borderRadius: 18,
-            border: `1px solid ${t.border}`,
-            boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)',
-            transition: 'transform 0.2s',
+            background: darkMode ? 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)' : 'linear-gradient(135deg, #06b6d4 0%, #67e8f9 100%)',
+            padding: 32,
+            borderRadius: 20,
+            border: `1px solid ${darkMode ? 'rgba(103, 232, 249, 0.3)' : 'rgba(255, 255, 255, 0.4)'}`,
+            boxShadow: '0 8px 32px rgba(8, 145, 178, 0.4)',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            cursor: 'pointer',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'
+            e.currentTarget.style.boxShadow = '0 16px 48px rgba(8, 145, 178, 0.5)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0) scale(1)'
+            e.currentTarget.style.boxShadow = '0 8px 32px rgba(8, 145, 178, 0.4)'
           }}>
-            <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 15, fontWeight: 500 }}>💼 Total Value</p>
-            <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>${formatCurrency((portfolio?.cash || 0) + portfolioValue)}</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <span style={{ fontSize: 32 }}>💼</span>
+              <p style={{ color: 'rgba(255, 255, 255, 0.9)', margin: 0, fontSize: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Value</p>
+            </div>
+            <p style={{ fontSize: 36, fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '-0.5px' }}>${formatCurrency((portfolio?.cash || 0) + portfolioValue)}</p>
           </div>
           <div style={{
             background: totalPnl >= 0
-              ? (darkMode ? 'linear-gradient(145deg, #065f46 0%, #064e3b 100%)' : 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)')
-              : (darkMode ? 'linear-gradient(145deg, #991b1b 0%, #7f1d1d 100%)' : 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)'),
-            padding: 28,
-            borderRadius: 18,
-            border: `2px solid ${totalPnl >= 0 ? (darkMode ? '#10b981' : '#6ee7b7') : (darkMode ? '#ef4444' : '#fca5a5')}`,
-            boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.12)',
-            transition: 'transform 0.2s',
+              ? (darkMode ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)' : 'linear-gradient(135deg, #10b981 0%, #34d399 100%)')
+              : (darkMode ? 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)'),
+            padding: 32,
+            borderRadius: 20,
+            border: `2px solid ${totalPnl >= 0 ? (darkMode ? 'rgba(52, 211, 153, 0.4)' : 'rgba(255, 255, 255, 0.5)') : (darkMode ? 'rgba(248, 113, 113, 0.4)' : 'rgba(255, 255, 255, 0.5)')}`,
+            boxShadow: totalPnl >= 0 ? '0 8px 32px rgba(16, 185, 129, 0.4)' : '0 8px 32px rgba(239, 68, 68, 0.4)',
+            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            cursor: 'pointer',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'
+            e.currentTarget.style.boxShadow = totalPnl >= 0 ? '0 16px 48px rgba(16, 185, 129, 0.5)' : '0 16px 48px rgba(239, 68, 68, 0.5)'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0) scale(1)'
+            e.currentTarget.style.boxShadow = totalPnl >= 0 ? '0 8px 32px rgba(16, 185, 129, 0.4)' : '0 8px 32px rgba(239, 68, 68, 0.4)'
           }}>
-            <p style={{ color: totalPnl >= 0 ? (darkMode ? '#d1fae5' : '#065f46') : (darkMode ? '#fecaca' : '#991b1b'), margin: '0 0 10px 0', fontSize: 15, fontWeight: 600 }}>
-              📈 Total P&L
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+              <span style={{ fontSize: 32 }}>{totalPnl >= 0 ? '📈' : '📉'}</span>
+              <p style={{ color: 'rgba(255, 255, 255, 0.9)', margin: 0, fontSize: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total P&L</p>
+            </div>
             <p style={{
-              fontSize: 32,
-              fontWeight: 700,
+              fontSize: 36,
+              fontWeight: 800,
               margin: 0,
-              color: totalPnl >= 0 ? (darkMode ? '#6ee7b7' : '#059669') : (darkMode ? '#fca5a5' : '#dc2626')
+              color: '#ffffff',
+              letterSpacing: '-0.5px'
             }}>
               {totalPnl >= 0 ? '+' : ''}${formatCurrency(Math.abs(totalPnl))}
             </p>
@@ -1317,29 +1474,51 @@ export default function Dashboard() {
         {/* Tabs */}
         <div style={{
           display: 'flex',
-          marginBottom: 36,
-          background: t.card,
-          padding: 8,
-          borderRadius: 14,
-          border: `1px solid ${t.border}`,
-          gap: 8,
-          boxShadow: darkMode ? '0 2px 12px rgba(0, 0, 0, 0.3)' : '0 1px 4px rgba(0, 0, 0, 0.04)'
+          marginBottom: 40,
+          background: darkMode ? 'rgba(30, 41, 59, 0.5)' : '#ffffff',
+          padding: 6,
+          borderRadius: 18,
+          border: `1px solid ${darkMode ? 'rgba(102, 126, 234, 0.2)' : '#e2e8f0'}`,
+          gap: 6,
+          boxShadow: darkMode ? '0 4px 24px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)',
+          backdropFilter: 'blur(10px)'
         }}>
           {(['market', 'history', 'analytics', 'advisor'] as const).map(tabName => (
             <button key={tabName} onClick={() => setTab(tabName)}
               style={{
                 flex: 1,
-                padding: '14px 24px',
+                padding: '16px 28px',
                 cursor: 'pointer',
-                background: tab === tabName ? t.accentGradient : 'transparent',
+                background: tab === tabName
+                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                  : 'transparent',
                 border: 'none',
-                borderRadius: 10,
+                borderRadius: 14,
                 color: tab === tabName ? '#ffffff' : t.subtext,
                 fontFamily: 'inherit',
                 fontSize: 16,
-                fontWeight: tab === tabName ? 600 : 500,
-                transition: 'all 0.2s',
-                boxShadow: tab === tabName ? '0 2px 8px rgba(102, 126, 234, 0.3)' : 'none'
+                fontWeight: tab === tabName ? 700 : 600,
+                transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                boxShadow: tab === tabName ? '0 4px 16px rgba(102, 126, 234, 0.4)' : 'none',
+                position: 'relative'
+              }}
+              onMouseEnter={e => {
+                if (tab !== tabName) {
+                  e.currentTarget.style.background = darkMode ? 'rgba(102, 126, 234, 0.15)' : '#f8fafc'
+                  e.currentTarget.style.color = darkMode ? '#a5b4fc' : '#64748b'
+                } else {
+                  e.currentTarget.style.transform = 'translateY(-2px)'
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.5)'
+                }
+              }}
+              onMouseLeave={e => {
+                if (tab !== tabName) {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = t.subtext
+                } else {
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(102, 126, 234, 0.4)'
+                }
               }}>
               {tabName === 'market' ? '📊 Market' : tabName === 'history' ? '📋 History' : tabName === 'analytics' ? '📈 Analytics' : '🤖 AI Advisor'}
             </button>
@@ -1351,55 +1530,104 @@ export default function Dashboard() {
             {/* Pending Orders Section */}
             {pendingOrders.length > 0 && (
               <div style={{
-                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
-                padding: 24,
-                borderRadius: 18,
-                marginBottom: 28,
-                boxShadow: '0 4px 16px rgba(139, 92, 246, 0.3)',
-                border: '1px solid rgba(255, 255, 255, 0.1)'
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                padding: 28,
+                borderRadius: 20,
+                marginBottom: 32,
+                boxShadow: '0 8px 32px rgba(139, 92, 246, 0.4)',
+                border: '2px solid rgba(167, 139, 250, 0.3)',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.boxShadow = '0 12px 48px rgba(139, 92, 246, 0.5)'
+                e.currentTarget.style.transform = 'translateY(-4px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.boxShadow = '0 8px 32px rgba(139, 92, 246, 0.4)'
+                e.currentTarget.style.transform = 'translateY(0)'
               }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: 20, fontWeight: 700, color: 'white' }}>
-                  ⏱️ Pending Orders ({pendingOrders.length})
+                <h3 style={{
+                  margin: '0 0 20px 0',
+                  fontSize: 22,
+                  fontWeight: 800,
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12
+                }}>
+                  <span style={{ fontSize: 28 }}>⏱️</span>
+                  <span>Pending Orders</span>
+                  <span style={{
+                    background: 'rgba(255, 255, 255, 0.25)',
+                    padding: '4px 12px',
+                    borderRadius: 20,
+                    fontSize: 16,
+                    fontWeight: 700
+                  }}>
+                    {pendingOrders.length}
+                  </span>
                 </h3>
-                <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'grid', gap: 14 }}>
                   {pendingOrders.map(order => (
                     <div key={order.id} style={{
-                      background: 'rgba(255, 255, 255, 0.15)',
-                      backdropFilter: 'blur(10px)',
-                      padding: '16px 20px',
-                      borderRadius: 12,
+                      background: 'rgba(255, 255, 255, 0.18)',
+                      backdropFilter: 'blur(12px)',
+                      padding: '18px 24px',
+                      borderRadius: 14,
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      border: '1px solid rgba(255, 255, 255, 0.2)'
+                      border: '2px solid rgba(255, 255, 255, 0.25)',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.25)'
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.4)'
+                      e.currentTarget.style.transform = 'translateX(8px)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.18)'
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)'
+                      e.currentTarget.style.transform = 'translateX(0)'
                     }}>
                       <div>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>{order.ticker}</span>
-                        <span style={{ margin: '0 12px', color: 'rgba(255, 255, 255, 0.8)' }}>
+                        <span style={{ fontSize: 20, fontWeight: 800, color: 'white' }}>{order.ticker}</span>
+                        <span style={{ margin: '0 16px', color: 'rgba(255, 255, 255, 0.85)', fontSize: 16, fontWeight: 600 }}>
                           {order.order_type === 'LIMIT_BUY' ? '📥 Buy' : order.order_type === 'LIMIT_SELL' ? '📤 Sell' : '🛑 Stop-Loss'}
                         </span>
-                        <span style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: 15 }}>
+                        <span style={{ color: 'rgba(255, 255, 255, 0.95)', fontSize: 16, fontWeight: 600 }}>
                           {order.order_type === 'LIMIT_BUY' && `when ≤ $${formatCurrency(order.target_price)}`}
                           {order.order_type === 'LIMIT_SELL' && `when ≥ $${formatCurrency(order.target_price)}`}
                           {order.order_type === 'STOP_LOSS' && `when ≤ $${formatCurrency(order.target_price)}`}
                         </span>
                         {order.order_type === 'LIMIT_BUY' && (
-                          <span style={{ marginLeft: 12, color: 'rgba(255, 255, 255, 0.7)', fontSize: 14 }}>
+                          <span style={{ marginLeft: 12, color: 'rgba(255, 255, 255, 0.7)', fontSize: 14, fontWeight: 600 }}>
                             (${formatCurrency(order.amount)})
                           </span>
                         )}
                       </div>
                       <button onClick={() => cancelOrder(order.id)} style={{
-                        padding: '8px 16px',
-                        background: 'rgba(239, 68, 68, 0.9)',
+                        padding: '10px 20px',
+                        background: 'rgba(239, 68, 68, 0.95)',
                         color: 'white',
                         border: 'none',
-                        borderRadius: 8,
+                        borderRadius: 10,
                         cursor: 'pointer',
                         fontFamily: 'inherit',
                         fontSize: 14,
-                        fontWeight: 600,
-                        transition: 'all 0.2s'
+                        fontWeight: 700,
+                        transition: 'all 0.2s',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = '#dc2626'
+                        e.currentTarget.style.transform = 'scale(1.05)'
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.95)'
+                        e.currentTarget.style.transform = 'scale(1)'
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)'
                       }}>
                         Cancel
                       </button>
@@ -1412,48 +1640,97 @@ export default function Dashboard() {
             {/* Price Alerts Section */}
             {priceAlerts.length > 0 && (
               <div style={{
-                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                padding: 24,
-                borderRadius: 18,
-                marginBottom: 28,
-                boxShadow: '0 4px 16px rgba(245, 158, 11, 0.3)',
-                border: '1px solid rgba(255, 255, 255, 0.1)'
+                background: 'linear-gradient(135deg, #f59e0b 0%, #ea580c 100%)',
+                padding: 28,
+                borderRadius: 20,
+                marginBottom: 32,
+                boxShadow: '0 8px 32px rgba(245, 158, 11, 0.4)',
+                border: '2px solid rgba(251, 191, 36, 0.3)',
+                transition: 'all 0.3s'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.boxShadow = '0 12px 48px rgba(245, 158, 11, 0.5)'
+                e.currentTarget.style.transform = 'translateY(-4px)'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.boxShadow = '0 8px 32px rgba(245, 158, 11, 0.4)'
+                e.currentTarget.style.transform = 'translateY(0)'
               }}>
-                <h3 style={{ margin: '0 0 16px 0', fontSize: 20, fontWeight: 700, color: 'white' }}>
-                  🔔 Active Price Alerts ({priceAlerts.length})
+                <h3 style={{
+                  margin: '0 0 20px 0',
+                  fontSize: 22,
+                  fontWeight: 800,
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12
+                }}>
+                  <span style={{ fontSize: 28 }}>🔔</span>
+                  <span>Active Price Alerts</span>
+                  <span style={{
+                    background: 'rgba(255, 255, 255, 0.25)',
+                    padding: '4px 12px',
+                    borderRadius: 20,
+                    fontSize: 16,
+                    fontWeight: 700
+                  }}>
+                    {priceAlerts.length}
+                  </span>
                 </h3>
-                <div style={{ display: 'grid', gap: 12 }}>
+                <div style={{ display: 'grid', gap: 14 }}>
                   {priceAlerts.map(alert => (
                     <div key={alert.id} style={{
-                      background: 'rgba(255, 255, 255, 0.15)',
-                      backdropFilter: 'blur(10px)',
-                      padding: '16px 20px',
-                      borderRadius: 12,
+                      background: 'rgba(255, 255, 255, 0.18)',
+                      backdropFilter: 'blur(12px)',
+                      padding: '18px 24px',
+                      borderRadius: 14,
                       display: 'flex',
                       justifyContent: 'space-between',
                       alignItems: 'center',
-                      border: '1px solid rgba(255, 255, 255, 0.2)'
+                      border: '2px solid rgba(255, 255, 255, 0.25)',
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.25)'
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.4)'
+                      e.currentTarget.style.transform = 'translateX(8px)'
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.18)'
+                      e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)'
+                      e.currentTarget.style.transform = 'translateX(0)'
                     }}>
                       <div>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: 'white' }}>{alert.ticker}</span>
-                        <span style={{ margin: '0 12px', color: 'rgba(255, 255, 255, 0.8)' }}>
+                        <span style={{ fontSize: 20, fontWeight: 800, color: 'white' }}>{alert.ticker}</span>
+                        <span style={{ margin: '0 16px', color: 'rgba(255, 255, 255, 0.85)', fontSize: 16, fontWeight: 600 }}>
                           {alert.alert_type === 'ABOVE' ? '📈 Alert Above' : '📉 Alert Below'}
                         </span>
-                        <span style={{ color: 'rgba(255, 255, 255, 0.9)', fontSize: 15 }}>
+                        <span style={{ color: 'rgba(255, 255, 255, 0.95)', fontSize: 16, fontWeight: 600 }}>
                           ${formatCurrency(parseFloat(alert.target_price))}
                         </span>
                       </div>
                       <button onClick={() => deleteAlert(alert.id)} style={{
-                        padding: '8px 16px',
-                        background: 'rgba(239, 68, 68, 0.9)',
+                        padding: '10px 20px',
+                        background: 'rgba(239, 68, 68, 0.95)',
                         color: 'white',
                         border: 'none',
-                        borderRadius: 8,
+                        borderRadius: 10,
                         cursor: 'pointer',
                         fontFamily: 'inherit',
                         fontSize: 14,
-                        fontWeight: 600,
-                        transition: 'all 0.2s'
+                        fontWeight: 700,
+                        transition: 'all 0.2s',
+                        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.2)'
+                      }}
+                      onMouseEnter={e => {
+                        e.currentTarget.style.background = '#dc2626'
+                        e.currentTarget.style.transform = 'scale(1.05)'
+                        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.3)'
+                      }}
+                      onMouseLeave={e => {
+                        e.currentTarget.style.background = 'rgba(239, 68, 68, 0.95)'
+                        e.currentTarget.style.transform = 'scale(1)'
+                        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)'
                       }}>
                         Delete
                       </button>
