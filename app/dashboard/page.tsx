@@ -88,8 +88,8 @@ export default function Dashboard() {
     inputBorder: darkMode ? '#374151' : '#cbd5e1',
     buyCard: darkMode ? 'linear-gradient(145deg, #1e3a5f 0%, #0f2847 100%)' : 'linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%)',
     buyBorder: darkMode ? '#3b82f6' : '#60a5fa',
-    accent: '#667eea',
-    accentGradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    accent: '#a78bfa',
+    accentGradient: 'linear-gradient(135deg, #a78bfa 0%, #c084fc 100%)',
   }
 
   useEffect(() => {
@@ -1356,115 +1356,113 @@ export default function Dashboard() {
         )}
 
         {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 20, marginBottom: 48 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16, marginBottom: 36 }}>
           <div style={{
             background: darkMode ? 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' : '#ffffff',
-            padding: 32,
-            borderRadius: 20,
-            border: `1px solid ${darkMode ? 'rgba(59, 130, 246, 0.2)' : '#e2e8f0'}`,
-            boxShadow: darkMode ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 4px 20px rgba(0, 0, 0, 0.08)',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            padding: 20,
+            borderRadius: 14,
+            border: `1px solid ${darkMode ? 'rgba(59, 130, 246, 0.2)' : '#e5e7eb'}`,
+            boxShadow: darkMode ? '0 2px 8px rgba(0, 0, 0, 0.2)' : '0 1px 3px rgba(0, 0, 0, 0.06)',
+            transition: 'all 0.2s',
             cursor: 'pointer',
             position: 'relative',
             overflow: 'hidden'
           }}
           onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'
-            e.currentTarget.style.boxShadow = darkMode ? '0 12px 48px rgba(59, 130, 246, 0.3)' : '0 12px 40px rgba(59, 130, 246, 0.15)'
-            e.currentTarget.style.borderColor = darkMode ? 'rgba(59, 130, 246, 0.5)' : '#3b82f6'
+            e.currentTarget.style.borderColor = darkMode ? 'rgba(59, 130, 246, 0.4)' : '#d1d5db'
+            e.currentTarget.style.boxShadow = darkMode ? '0 4px 12px rgba(59, 130, 246, 0.15)' : '0 2px 6px rgba(0, 0, 0, 0.08)'
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translateY(0) scale(1)'
-            e.currentTarget.style.boxShadow = darkMode ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 4px 20px rgba(0, 0, 0, 0.08)'
-            e.currentTarget.style.borderColor = darkMode ? 'rgba(59, 130, 246, 0.2)' : '#e2e8f0'
+            e.currentTarget.style.borderColor = darkMode ? 'rgba(59, 130, 246, 0.2)' : '#e5e7eb'
+            e.currentTarget.style.boxShadow = darkMode ? '0 2px 8px rgba(0, 0, 0, 0.2)' : '0 1px 3px rgba(0, 0, 0, 0.06)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-              <span style={{ fontSize: 32 }}>💰</span>
-              <p style={{ color: t.subtext, margin: 0, fontSize: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Cash Available</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span style={{ fontSize: 28 }}>💰</span>
+              <p style={{ color: t.subtext, margin: 0, fontSize: 12, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Cash Available</p>
             </div>
-            <p style={{ fontSize: 36, fontWeight: 800, margin: 0, color: t.text, letterSpacing: '-0.5px' }}>${formatCurrency(portfolio?.cash || 0)}</p>
+            <p style={{ fontSize: 28, fontWeight: 600, margin: 0, color: t.text, letterSpacing: '-0.3px' }}>${formatCurrency(portfolio?.cash || 0)}</p>
           </div>
           <div style={{
-            background: darkMode ? 'linear-gradient(135deg, #7c3aed 0%, #6366f1 100%)' : 'linear-gradient(135deg, #a78bfa 0%, #8b5cf6 100%)',
-            padding: 32,
-            borderRadius: 20,
-            border: `1px solid ${darkMode ? 'rgba(167, 139, 250, 0.3)' : 'rgba(255, 255, 255, 0.4)'}`,
-            boxShadow: '0 8px 32px rgba(124, 58, 237, 0.4)',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            background: darkMode ? 'linear-gradient(135deg, rgba(167, 139, 250, 0.15) 0%, rgba(99, 102, 241, 0.1) 100%)' : 'linear-gradient(135deg, rgba(167, 139, 250, 0.08) 0%, rgba(192, 181, 253, 0.08) 100%)',
+            padding: 20,
+            borderRadius: 14,
+            border: `1px solid ${darkMode ? 'rgba(167, 139, 250, 0.3)' : 'rgba(167, 139, 250, 0.2)'}`,
+            boxShadow: darkMode ? '0 2px 8px rgba(167, 139, 250, 0.1)' : '0 1px 3px rgba(167, 139, 250, 0.08)',
+            transition: 'all 0.2s',
             cursor: 'pointer',
             position: 'relative',
             overflow: 'hidden'
           }}
           onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'
-            e.currentTarget.style.boxShadow = '0 16px 48px rgba(124, 58, 237, 0.5)'
+            e.currentTarget.style.borderColor = darkMode ? 'rgba(167, 139, 250, 0.5)' : 'rgba(167, 139, 250, 0.3)'
+            e.currentTarget.style.boxShadow = darkMode ? '0 4px 12px rgba(167, 139, 250, 0.15)' : '0 2px 6px rgba(167, 139, 250, 0.12)'
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translateY(0) scale(1)'
-            e.currentTarget.style.boxShadow = '0 8px 32px rgba(124, 58, 237, 0.4)'
+            e.currentTarget.style.borderColor = darkMode ? 'rgba(167, 139, 250, 0.3)' : 'rgba(167, 139, 250, 0.2)'
+            e.currentTarget.style.boxShadow = darkMode ? '0 2px 8px rgba(167, 139, 250, 0.1)' : '0 1px 3px rgba(167, 139, 250, 0.08)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-              <span style={{ fontSize: 32 }}>📊</span>
-              <p style={{ color: 'rgba(255, 255, 255, 0.9)', margin: 0, fontSize: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Portfolio Value</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span style={{ fontSize: 28 }}>📊</span>
+              <p style={{ color: darkMode ? 'rgba(192, 181, 253, 0.9)' : '#7c3aed', margin: 0, fontSize: 12, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Portfolio Value</p>
             </div>
-            <p style={{ fontSize: 36, fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '-0.5px' }}>${formatCurrency(portfolioValue)}</p>
+            <p style={{ fontSize: 28, fontWeight: 600, margin: 0, color: darkMode ? '#c4b5fd' : '#8b5cf6', letterSpacing: '-0.3px' }}>${formatCurrency(portfolioValue)}</p>
           </div>
           <div style={{
-            background: darkMode ? 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)' : 'linear-gradient(135deg, #06b6d4 0%, #67e8f9 100%)',
-            padding: 32,
-            borderRadius: 20,
-            border: `1px solid ${darkMode ? 'rgba(103, 232, 249, 0.3)' : 'rgba(255, 255, 255, 0.4)'}`,
-            boxShadow: '0 8px 32px rgba(8, 145, 178, 0.4)',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            background: darkMode ? 'linear-gradient(135deg, rgba(34, 211, 153, 0.15) 0%, rgba(6, 182, 212, 0.1) 100%)' : 'linear-gradient(135deg, rgba(34, 211, 153, 0.08) 0%, rgba(103, 232, 249, 0.08) 100%)',
+            padding: 20,
+            borderRadius: 14,
+            border: `1px solid ${darkMode ? 'rgba(34, 211, 153, 0.3)' : 'rgba(34, 211, 153, 0.2)'}`,
+            boxShadow: darkMode ? '0 2px 8px rgba(34, 211, 153, 0.1)' : '0 1px 3px rgba(34, 211, 153, 0.08)',
+            transition: 'all 0.2s',
             cursor: 'pointer',
             position: 'relative',
             overflow: 'hidden'
           }}
           onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'
-            e.currentTarget.style.boxShadow = '0 16px 48px rgba(8, 145, 178, 0.5)'
+            e.currentTarget.style.borderColor = darkMode ? 'rgba(34, 211, 153, 0.5)' : 'rgba(34, 211, 153, 0.3)'
+            e.currentTarget.style.boxShadow = darkMode ? '0 4px 12px rgba(34, 211, 153, 0.15)' : '0 2px 6px rgba(34, 211, 153, 0.12)'
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translateY(0) scale(1)'
-            e.currentTarget.style.boxShadow = '0 8px 32px rgba(8, 145, 178, 0.4)'
+            e.currentTarget.style.borderColor = darkMode ? 'rgba(34, 211, 153, 0.3)' : 'rgba(34, 211, 153, 0.2)'
+            e.currentTarget.style.boxShadow = darkMode ? '0 2px 8px rgba(34, 211, 153, 0.1)' : '0 1px 3px rgba(34, 211, 153, 0.08)'
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-              <span style={{ fontSize: 32 }}>💼</span>
-              <p style={{ color: 'rgba(255, 255, 255, 0.9)', margin: 0, fontSize: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Value</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span style={{ fontSize: 28 }}>💼</span>
+              <p style={{ color: darkMode ? 'rgba(34, 211, 153, 0.9)' : '#059669', margin: 0, fontSize: 12, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Total Value</p>
             </div>
-            <p style={{ fontSize: 36, fontWeight: 800, margin: 0, color: '#ffffff', letterSpacing: '-0.5px' }}>${formatCurrency((portfolio?.cash || 0) + portfolioValue)}</p>
+            <p style={{ fontSize: 28, fontWeight: 600, margin: 0, color: darkMode ? '#6ee7b7' : '#10b981', letterSpacing: '-0.3px' }}>${formatCurrency((portfolio?.cash || 0) + portfolioValue)}</p>
           </div>
           <div style={{
             background: totalPnl >= 0
-              ? (darkMode ? 'linear-gradient(135deg, #059669 0%, #10b981 100%)' : 'linear-gradient(135deg, #10b981 0%, #34d399 100%)')
-              : (darkMode ? 'linear-gradient(135deg, #dc2626 0%, #ef4444 100%)' : 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)'),
-            padding: 32,
-            borderRadius: 20,
-            border: `2px solid ${totalPnl >= 0 ? (darkMode ? 'rgba(52, 211, 153, 0.4)' : 'rgba(255, 255, 255, 0.5)') : (darkMode ? 'rgba(248, 113, 113, 0.4)' : 'rgba(255, 255, 255, 0.5)')}`,
-            boxShadow: totalPnl >= 0 ? '0 8px 32px rgba(16, 185, 129, 0.4)' : '0 8px 32px rgba(239, 68, 68, 0.4)',
-            transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              ? (darkMode ? 'linear-gradient(135deg, rgba(34, 211, 153, 0.15) 0%, rgba(16, 185, 129, 0.1) 100%)' : 'linear-gradient(135deg, rgba(34, 211, 153, 0.08) 0%, rgba(52, 211, 153, 0.08) 100%)')
+              : (darkMode ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.1) 100%)' : 'linear-gradient(135deg, rgba(239, 68, 68, 0.08) 0%, rgba(248, 113, 113, 0.08) 100%)'),
+            padding: 20,
+            borderRadius: 14,
+            border: `1px solid ${totalPnl >= 0 ? (darkMode ? 'rgba(34, 211, 153, 0.3)' : 'rgba(34, 211, 153, 0.2)') : (darkMode ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.2)')}`,
+            boxShadow: totalPnl >= 0 ? (darkMode ? '0 2px 8px rgba(34, 211, 153, 0.1)' : '0 1px 3px rgba(34, 211, 153, 0.08)') : (darkMode ? '0 2px 8px rgba(239, 68, 68, 0.1)' : '0 1px 3px rgba(239, 68, 68, 0.08)'),
+            transition: 'all 0.2s',
             cursor: 'pointer',
             position: 'relative',
             overflow: 'hidden'
           }}
           onMouseEnter={e => {
-            e.currentTarget.style.transform = 'translateY(-8px) scale(1.02)'
-            e.currentTarget.style.boxShadow = totalPnl >= 0 ? '0 16px 48px rgba(16, 185, 129, 0.5)' : '0 16px 48px rgba(239, 68, 68, 0.5)'
+            e.currentTarget.style.borderColor = totalPnl >= 0 ? (darkMode ? 'rgba(34, 211, 153, 0.5)' : 'rgba(34, 211, 153, 0.3)') : (darkMode ? 'rgba(239, 68, 68, 0.5)' : 'rgba(239, 68, 68, 0.3)')
+            e.currentTarget.style.boxShadow = totalPnl >= 0 ? (darkMode ? '0 4px 12px rgba(34, 211, 153, 0.15)' : '0 2px 6px rgba(34, 211, 153, 0.12)') : (darkMode ? '0 4px 12px rgba(239, 68, 68, 0.15)' : '0 2px 6px rgba(239, 68, 68, 0.12)')
           }}
           onMouseLeave={e => {
-            e.currentTarget.style.transform = 'translateY(0) scale(1)'
-            e.currentTarget.style.boxShadow = totalPnl >= 0 ? '0 8px 32px rgba(16, 185, 129, 0.4)' : '0 8px 32px rgba(239, 68, 68, 0.4)'
+            e.currentTarget.style.borderColor = totalPnl >= 0 ? (darkMode ? 'rgba(34, 211, 153, 0.3)' : 'rgba(34, 211, 153, 0.2)') : (darkMode ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.2)')
+            e.currentTarget.style.boxShadow = totalPnl >= 0 ? (darkMode ? '0 2px 8px rgba(34, 211, 153, 0.1)' : '0 1px 3px rgba(34, 211, 153, 0.08)') : (darkMode ? '0 2px 8px rgba(239, 68, 68, 0.1)' : '0 1px 3px rgba(239, 68, 68, 0.08)')
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-              <span style={{ fontSize: 32 }}>{totalPnl >= 0 ? '📈' : '📉'}</span>
-              <p style={{ color: 'rgba(255, 255, 255, 0.9)', margin: 0, fontSize: 14, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total P&L</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <span style={{ fontSize: 28 }}>{totalPnl >= 0 ? '📈' : '📉'}</span>
+              <p style={{ color: totalPnl >= 0 ? (darkMode ? 'rgba(34, 211, 153, 0.9)' : '#059669') : (darkMode ? 'rgba(239, 68, 68, 0.9)' : '#991b1b'), margin: 0, fontSize: 12, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.3px' }}>Total P&L</p>
             </div>
             <p style={{
-              fontSize: 36,
-              fontWeight: 800,
+              fontSize: 28,
+              fontWeight: 600,
               margin: 0,
-              color: '#ffffff',
-              letterSpacing: '-0.5px'
+              color: totalPnl >= 0 ? (darkMode ? '#6ee7b7' : '#10b981') : (darkMode ? '#f87171' : '#ef4444'),
+              letterSpacing: '-0.3px'
             }}>
               {totalPnl >= 0 ? '+' : ''}${formatCurrency(Math.abs(totalPnl))}
             </p>
