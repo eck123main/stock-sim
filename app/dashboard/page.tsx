@@ -79,17 +79,17 @@ export default function Dashboard() {
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const t = {
-    bg: darkMode ? '#0f0f1e' : 'linear-gradient(135deg, #f5f7fa 0%, #e8ecf1 100%)',
-    card: darkMode ? 'linear-gradient(145deg, #1a1a2e 0%, #16213e 100%)' : '#ffffff',
+    bg: darkMode ? '#181a20' : '#f4f5f7',
+    card: darkMode ? '#23263a' : '#fff',
     border: darkMode ? '#2a2a4a' : '#e0e7ed',
     text: darkMode ? '#e8e8f0' : '#1a202c',
     subtext: darkMode ? '#9ca3af' : '#64748b',
-    input: darkMode ? '#1a1a2e' : '#ffffff',
+    input: darkMode ? '#23263a' : '#fff',
     inputBorder: darkMode ? '#374151' : '#cbd5e1',
-    buyCard: darkMode ? 'linear-gradient(145deg, #1e3a5f 0%, #0f2847 100%)' : 'linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%)',
+    buyCard: darkMode ? '#1e293b' : '#f3f4f6',
     buyBorder: darkMode ? '#3b82f6' : '#60a5fa',
-    accent: '#a78bfa',
-    accentGradient: 'linear-gradient(135deg, #a78bfa 0%, #c084fc 100%)',
+    accent: '#2563eb',
+    accentGradient: darkMode ? '#3730a3' : '#2563eb',
   }
 
   useEffect(() => {
@@ -749,10 +749,10 @@ export default function Dashboard() {
           alignItems: 'center',
           marginBottom: 48,
           padding: '32px 40px',
-          background: darkMode ? 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)' : '#ffffff',
+          background: t.card,
           borderRadius: 24,
-          boxShadow: darkMode ? '0 8px 32px rgba(0, 0, 0, 0.5)' : '0 4px 20px rgba(0, 0, 0, 0.08)',
-          border: `1px solid ${darkMode ? 'rgba(102, 126, 234, 0.2)' : '#e2e8f0'}`,
+          boxShadow: darkMode ? '0 8px 32px rgba(0,0,0,0.5)' : '0 4px 20px rgba(0,0,0,0.08)',
+          border: `1px solid ${t.border}`,
           transition: 'transform 0.2s, box-shadow 0.2s'
         }}
         onMouseEnter={e => {
@@ -771,11 +771,8 @@ export default function Dashboard() {
               display: 'flex',
               alignItems: 'center',
               gap: 16,
-              background: darkMode ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
-              backgroundClip: 'text'
-            }}>
+              color: t.text
+            }}
               <span style={{ fontSize: 40 }}>📈</span>
               <span>Stock Simulator</span>
             </h1>
