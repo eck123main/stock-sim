@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Bar } from 'recharts'
-import { calculateAllIndicators, getIndicatorSignals } from '../../lib/indicators'
+import { calculateAllIndicators, getIndicatorSignals } from '../lib/indicators'
 
 interface StockDetailChartProps {
   ticker: string

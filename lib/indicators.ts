@@ -63,10 +63,12 @@ export function calculateRSI(prices: number[], period: number = 14): (number | u
   avgGain /= period
   avgLoss /= period
 
-  rsi[period] = 100 - (100 / (1 + avgGain / avgLoss))
+  rsi[period] = rsiFromAverages(avgGain, avgLoss)
 
+  // changes[k] is the move from prices[k] to prices[k + 1], so the change
+  // that ends at price index i is changes[i - 1].
   for (let i = period + 1; i < prices.length; i++) {
-    const change = changes[i]
+    const change = changes[i - 1]
     if (change > 0) {
       avgGain = (avgGain * (period - 1) + change) / period
       avgLoss = (avgLoss * (period - 1)) / period
@@ -75,10 +77,18 @@ export function calculateRSI(prices: number[], period: number = 14): (number | u
       avgLoss = (avgLoss * (period - 1) + Math.abs(change)) / period
     }
 
-    rsi[i] = 100 - (100 / (1 + avgGain / avgLoss))
+    rsi[i] = rsiFromAverages(avgGain, avgLoss)
   }
 
   return rsi
+}
+
+// Wilder RSI from smoothed average gain/loss, with the degenerate cases
+// handled explicitly: no losses -> 100, no gains -> 0, flat prices -> 50.
+function rsiFromAverages(avgGain: number, avgLoss: number): number {
+  if (avgLoss === 0 && avgGain === 0) return 50
+  if (avgLoss === 0) return 100
+  return 100 - (100 / (1 + avgGain / avgLoss))
 }
 
 export function calculateMACD(prices: number[], fastPeriod: number = 12, slowPeriod: number = 26, signalPeriod: number = 9): { macd: (number | undefined)[], signal: (number | undefined)[] } {
@@ -89,8 +99,16 @@ export function calculateMACD(prices: number[], fastPeriod: number = 12, slowPer
     val !== undefined && ema26[i] !== undefined ? val - ema26[i] : undefined
   )
 
-  const macdValues = macd.filter((val): val is number => val !== undefined)
-  const signal = calculateEMA(macdValues, signalPeriod)
+  // The signal line is an EMA of the MACD line. MACD is undefined for the
+  // first (slowPeriod - 1) points, so compute the EMA over the defined tail
+  // and then shift it back so signal[i] lines up with macd[i] / prices[i].
+  const firstDefined = macd.findIndex(v => v !== undefined)
+  const signal: (number | undefined)[] = new Array(prices.length).fill(undefined)
+  if (firstDefined !== -1) {
+    const macdValues = macd.slice(firstDefined) as number[]
+    const signalTail = calculateEMA(macdValues, signalPeriod)
+    signalTail.forEach((v, j) => { signal[firstDefined + j] = v })
+  }
 
   return { macd, signal }
 }
