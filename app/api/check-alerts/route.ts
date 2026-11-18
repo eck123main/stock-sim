@@ -8,9 +8,23 @@ const supabase = createClient(
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, currentPrices } = await req.json()
+    // This route uses the service-role key (bypasses RLS), so the user must be
+    // derived from a verified access token, never trusted from the body.
+    // Otherwise anyone could trigger/deactivate alerts for any user id.
+    const authHeader = req.headers.get('authorization') || ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const { data: authData, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !authData?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const userId = authData.user.id
 
-    if (!userId || !currentPrices) {
+    const { currentPrices } = await req.json()
+
+    if (!currentPrices || typeof currentPrices !== 'object') {
       return NextResponse.json({ error: 'Missing parameters' }, { status: 400 })
     }
 
@@ -29,15 +43,16 @@ export async function POST(req: NextRequest) {
 
     // Check each alert
     for (const alert of alerts || []) {
-      const currentPrice = currentPrices[alert.ticker]
+      const currentPrice = Number(currentPrices[alert.ticker])
+      const targetPrice = Number(alert.target_price)
 
-      if (!currentPrice) continue
+      if (!Number.isFinite(currentPrice) || currentPrice <= 0 || !Number.isFinite(targetPrice)) continue
 
       let shouldTrigger = false
 
-      if (alert.alert_type === 'ABOVE' && currentPrice >= alert.target_price) {
+      if (alert.alert_type === 'ABOVE' && currentPrice >= targetPrice) {
         shouldTrigger = true
-      } else if (alert.alert_type === 'BELOW' && currentPrice <= alert.target_price) {
+      } else if (alert.alert_type === 'BELOW' && currentPrice <= targetPrice) {
         shouldTrigger = true
       }
 
@@ -47,7 +62,7 @@ export async function POST(req: NextRequest) {
           user_id: userId,
           type: 'PRICE_ALERT',
           title: `${alert.ticker} Price Alert`,
-          message: `${alert.ticker} is now ${alert.alert_type === 'ABOVE' ? 'above' : 'below'} $${alert.target_price.toFixed(2)} (Current: $${currentPrice.toFixed(2)})`
+          message: `${alert.ticker} is now ${alert.alert_type === 'ABOVE' ? 'above' : 'below'} $${targetPrice.toFixed(2)} (Current: $${currentPrice.toFixed(2)})`
         })
 
         // Deactivate alert

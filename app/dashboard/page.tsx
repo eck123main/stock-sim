@@ -5,6 +5,8 @@ import { searchStock } from '../../lib/stocks'
 import PortfolioChart from '../../components/PortfolioChart'
 import StockPerformanceChart from '../../components/StockPerformanceChart'
 import PortfolioComposition from '../../components/PortfolioComposition'
+import { computeHolding, heldTickers, planOrderExecutions } from '../../lib/portfolio'
+import { computeTradeStats, computeDrawdown } from '../../lib/metrics'
 
 // Helper function to format currency with commas
 function formatCurrency(amount: number): string {
@@ -196,21 +198,29 @@ export default function Dashboard() {
     setSearchLoading(false)
   }
 
-  async function savePortfolioSnapshot() {
+  // Callers that just changed cash/positions must pass the new values:
+  // React state isn't updated yet inside the same handler, so reading
+  // `portfolio`/`trades` here would record the pre-trade portfolio.
+  async function savePortfolioSnapshot(
+    state: { cash?: number, lots?: any[], prices?: Record<string, number> } = {}
+  ) {
     if (!user || !portfolio) return
+    const cash = Number(state.cash ?? portfolio.cash)
+    const lots = state.lots ?? trades
+    const prices = state.prices ?? livePrices
 
-    const holdingsValue = getAllHeldTickers().reduce((sum, ticker) => {
-      const holding = getHolding(ticker)
+    const holdingsValue = heldTickers(lots).reduce((sum, ticker) => {
+      const holding = computeHolding(lots, ticker)
       if (!holding) return sum
-      return sum + holding.shares * (livePrices[ticker] || holding.avgPrice)
+      return sum + holding.shares * (prices[ticker] || holding.avgPrice)
     }, 0)
 
-    const totalValue = portfolio.cash + holdingsValue
+    const totalValue = cash + holdingsValue
 
     await supabase.from('portfolio_snapshots').insert({
       user_id: user.id,
       portfolio_value: totalValue,
-      cash: portfolio.cash,
+      cash,
       holdings_value: holdingsValue
     })
 
@@ -339,91 +349,97 @@ export default function Dashboard() {
     setMessage('Order cancelled')
   }
 
-  async function checkAndExecuteOrders() {
-    if (pendingOrders.length === 0) return
+  // `prices` is passed in explicitly: right after setLivePrices() the
+  // `livePrices` state in this closure is still the old value.
+  async function checkAndExecuteOrders(prices: Record<string, number> = livePrices) {
+    if (pendingOrders.length === 0 || !portfolio) return
 
-    for (const order of pendingOrders) {
-      const currentPrice = livePrices[order.ticker]
-      if (!currentPrice) continue
+    // Oldest orders first, so earlier orders get priority on cash/shares
+    const ordered = [...pendingOrders].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    )
+    const plan = planOrderExecutions(ordered, prices, Number(portfolio.cash), trades)
+    if (plan.executions.length === 0 && plan.cancellations.length === 0) return
 
-      let shouldExecute = false
-
-      if (order.order_type === 'LIMIT_BUY' && currentPrice <= order.target_price) {
-        shouldExecute = true
-      } else if (order.order_type === 'LIMIT_SELL' && currentPrice >= order.target_price) {
-        shouldExecute = true
-      } else if (order.order_type === 'STOP_LOSS' && currentPrice <= order.target_price) {
-        shouldExecute = true
-      }
-
-      if (shouldExecute) {
-        // Execute the order
-        if (order.order_type === 'LIMIT_BUY') {
-          const shares = order.amount / currentPrice
-          const newCash = portfolio.cash - order.amount
-
+    const messages: string[] = []
+    for (const ex of plan.executions) {
+      if (ex.kind === 'BUY') {
+        await supabase.from('trades').insert({
+          user_id: user.id,
+          ticker: ex.ticker,
+          company_name: ex.ticker,
+          shares: ex.shares,
+          price_at_purchase: ex.price
+        })
+        await supabase.from('trade_history').insert({
+          user_id: user.id,
+          ticker: ex.ticker,
+          company_name: ex.ticker,
+          action: 'BUY',
+          shares: ex.shares,
+          price: ex.price,
+          total_value: ex.cost,
+          profit_loss: null
+        })
+        messages.push(`🎯 Limit buy executed: Bought ${ex.shares.toFixed(4)} ${ex.ticker} at $${formatCurrency(ex.price)}`)
+      } else {
+        // Replace the position's lots with a single remaining lot at the
+        // unchanged average cost (supports partial sells).
+        await supabase.from('trades').delete().eq('user_id', user.id).eq('ticker', ex.ticker)
+        if (ex.remainingShares > 0) {
           await supabase.from('trades').insert({
             user_id: user.id,
-            ticker: order.ticker,
-            company_name: order.ticker,
-            shares,
-            price_at_purchase: currentPrice
+            ticker: ex.ticker,
+            company_name: ex.ticker,
+            shares: ex.remainingShares,
+            price_at_purchase: ex.avgPrice
           })
-
-          await supabase.from('trade_history').insert({
-            user_id: user.id,
-            ticker: order.ticker,
-            company_name: order.ticker,
-            action: 'BUY',
-            shares,
-            price: currentPrice,
-            total_value: order.amount,
-            profit_loss: null
-          })
-
-          await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
-
-          setPortfolio({ ...portfolio, cash: newCash })
-          setTrades(prev => [...prev, { ticker: order.ticker, shares, price_at_purchase: currentPrice }])
-
-          setMessage(`🎯 Limit buy executed: Bought ${shares.toFixed(4)} ${order.ticker} at $${formatCurrency(currentPrice)}!`)
-        } else {
-          // LIMIT_SELL or STOP_LOSS
-          const value = order.shares * currentPrice
-          const holding = getHolding(order.ticker)
-          const profitLoss = holding ? value - (order.shares * holding.avgPrice) : 0
-          const newCash = portfolio.cash + value
-
-          await supabase.from('trades').delete().eq('user_id', user.id).eq('ticker', order.ticker)
-
-          await supabase.from('trade_history').insert({
-            user_id: user.id,
-            ticker: order.ticker,
-            action: 'SELL',
-            shares: order.shares,
-            price: currentPrice,
-            total_value: value,
-            profit_loss: profitLoss
-          })
-
-          await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
-
-          setPortfolio({ ...portfolio, cash: newCash })
-          setTrades(prev => prev.filter(tr => tr.ticker !== order.ticker))
-
-          const orderName = order.order_type === 'STOP_LOSS' ? 'Stop-loss' : 'Limit sell'
-          setMessage(`🎯 ${orderName} executed: Sold ${order.shares.toFixed(4)} ${order.ticker} at $${formatCurrency(currentPrice)}!`)
         }
-
-        // Mark order as executed
-        await supabase
-          .from('pending_orders')
-          .update({ status: 'EXECUTED', executed_at: new Date().toISOString() })
-          .eq('id', order.id)
-
-        savePortfolioSnapshot()
+        await supabase.from('trade_history').insert({
+          user_id: user.id,
+          ticker: ex.ticker,
+          action: 'SELL',
+          shares: ex.shares,
+          price: ex.price,
+          total_value: ex.proceeds,
+          profit_loss: ex.profitLoss
+        })
+        const orderName = ex.order.order_type === 'STOP_LOSS' ? 'Stop-loss' : 'Limit sell'
+        messages.push(`🎯 ${orderName} executed: Sold ${ex.shares.toFixed(4)} ${ex.ticker} at $${formatCurrency(ex.price)}`)
       }
+
+      await supabase
+        .from('pending_orders')
+        .update({ status: 'EXECUTED', executed_at: new Date().toISOString() })
+        .eq('id', ex.order.id)
     }
+
+    // Sell orders whose position no longer exists can never fill: cancel them
+    // instead of letting them later "sell" shares that aren't there.
+    for (const c of plan.cancellations) {
+      await supabase.from('pending_orders').update({ status: 'CANCELLED' }).eq('id', c.order.id)
+      messages.push(`Cancelled ${c.order.order_type.replace('_', ' ').toLowerCase()} for ${c.order.ticker} (${c.reason})`)
+    }
+    for (const s of plan.skipped) {
+      messages.push(`⚠️ Limit buy for ${s.order.ticker} triggered but was not filled (${s.reason})`)
+    }
+
+    if (plan.executions.length > 0) {
+      await supabase.from('portfolios').update({ cash: plan.cash }).eq('id', user.id)
+      setPortfolio({ ...portfolio, cash: plan.cash })
+
+      const { data: tradesData } = await supabase.from('trades').select('*').eq('user_id', user.id)
+      setTrades(tradesData || [])
+      savePortfolioSnapshot({ cash: plan.cash, lots: tradesData || [], prices })
+      const { data: historyData } = await supabase
+        .from('trade_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10000)
+      setTradeHistory(historyData || [])
+    }
+    if (messages.length) setMessage(messages.join(' · '))
 
     // Refresh pending orders
     const { data: ordersData } = await supabase
@@ -513,10 +529,16 @@ export default function Dashboard() {
     }
 
     // Call API to check and trigger alerts
+    // The API verifies who we are from the session token
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) return
     await fetch('/api/check-alerts', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ userId: user.id, currentPrices: prices })
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ currentPrices: prices })
     })
 
     // Refresh alerts and notifications
@@ -542,13 +564,24 @@ export default function Dashboard() {
     setRefreshingPrices(true)
     setMessage('')
 
-    const heldTickers = [...new Set(trades.map((t: any) => t.ticker))]
-    const prices: Record<string, number> = {}
+    // Price held positions AND tickers with pending orders; otherwise a limit
+    // buy for a stock you don't own yet could never be checked.
+    const tickersToPrice = [...new Set([
+      ...heldTickers(trades),
+      ...pendingOrders.map((o: any) => o.ticker as string),
+    ])]
+    // Keep previously known prices; a failed fetch shouldn't erase them.
+    const prices: Record<string, number> = { ...livePrices }
+    const fresh: Record<string, number> = {}
+    const failed: string[] = []
 
-    for (const ticker of heldTickers) {
-      const result = await searchStock(ticker as string)
+    for (const ticker of tickersToPrice) {
+      const result = await searchStock(ticker)
       if (!result.error && result.price) {
-        prices[ticker as string] = result.price
+        prices[ticker] = result.price
+        fresh[ticker] = result.price
+      } else {
+        failed.push(ticker)
       }
       await new Promise(r => setTimeout(r, 500))
     }
@@ -558,10 +591,13 @@ export default function Dashboard() {
     localStorage.setItem('stock_prices', JSON.stringify(prices))
     localStorage.setItem('stock_prices_timestamp', Date.now().toString())
     setRefreshingPrices(false)
-    setMessage('✅ Prices refreshed successfully!')
+    setMessage(failed.length
+      ? `⚠️ Prices refreshed, but could not fetch: ${failed.join(', ')}`
+      : '✅ Prices refreshed successfully!')
 
-    // Check and execute any pending orders
-    await checkAndExecuteOrders()
+    // Check pending orders only against prices fetched just now, never
+    // against stale cached prices.
+    await checkAndExecuteOrders(fresh)
 
     // Check price alerts
     await checkPriceAlerts()
@@ -575,7 +611,7 @@ export default function Dashboard() {
     if (dollars > portfolio.cash) return setMessage('Not enough cash!')
 
     const shares = dollars / selectedStock.price
-    const newCash = portfolio.cash - dollars
+    const newCash = Number(portfolio.cash) - dollars
 
     await supabase.from('trades').insert({
       user_id: user.id, ticker: selectedStock.ticker,
@@ -597,23 +633,37 @@ export default function Dashboard() {
 
     await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
 
+    const newLot = { ticker: selectedStock.ticker, shares, price_at_purchase: selectedStock.price }
     setPortfolio({ ...portfolio, cash: newCash })
-    setTrades(prev => [...prev, { ticker: selectedStock.ticker, shares, price_at_purchase: selectedStock.price }])
+    setTrades(prev => [...prev, newLot])
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
     setBuyAmount('')
     setMessage(`✅ Bought ${shares.toFixed(4)} shares of ${selectedStock.ticker} for $${formatCurrency(dollars)}!`)
 
-    // Save portfolio snapshot
-    savePortfolioSnapshot()
+    // Save portfolio snapshot with the post-trade state
+    savePortfolioSnapshot({
+      cash: newCash,
+      lots: [...trades, newLot],
+      prices: { ...livePrices, [selectedStock.ticker]: selectedStock.price },
+    })
   }
 
   async function handleSell(ticker: string) {
     const holding = getHolding(ticker)
     if (!holding) return
-    const price = livePrices[ticker] || holding.avgPrice
+    // Sell at a freshly fetched market price. Previously this silently fell
+    // back to the average cost when no live price was cached, which recorded
+    // a fake breakeven trade.
+    const quote = await searchStock(ticker)
+    const price = !quote.error && quote.price ? quote.price : livePrices[ticker]
+    if (!price) {
+      setMessage(`Could not get a current price for ${ticker}; sell cancelled. Try refreshing prices.`)
+      return
+    }
+    setLivePrices(prev => ({ ...prev, [ticker]: price }))
     const value = holding.shares * price
     const profitLoss = value - (holding.shares * holding.avgPrice)
-    const newCash = portfolio.cash + value
+    const newCash = Number(portfolio.cash) + value
 
     await supabase.from('trades').delete().eq('user_id', user.id).eq('ticker', ticker)
 
@@ -635,10 +685,14 @@ export default function Dashboard() {
     setTrades(prev => prev.filter(tr => tr.ticker !== ticker))
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
     if (selectedStock?.ticker === ticker) setSelectedStock(null)
-    setMessage(`✅ Sold all ${ticker} for $${formatCurrency(value)}! P&L: ${profitLoss >= 0 ? '+' : ''}$${formatCurrency(Math.abs(profitLoss))}`)
+    setMessage(`✅ Sold all ${ticker} for $${formatCurrency(value)}! P&L: ${profitLoss >= 0 ? '+' : '-'}$${formatCurrency(Math.abs(profitLoss))}`)
 
-    // Save portfolio snapshot
-    savePortfolioSnapshot()
+    // Save portfolio snapshot with the post-trade state
+    savePortfolioSnapshot({
+      cash: newCash,
+      lots: trades.filter(tr => tr.ticker !== ticker),
+      prices: { ...livePrices, [ticker]: price },
+    })
   }
 
   async function handleChat() {
@@ -657,7 +711,7 @@ export default function Dashboard() {
 
     const portfolioContext = {
       cash: portfolio.cash,
-      totalValue: portfolio.cash + getAllHeldTickers().reduce((sum, ticker) => {
+      totalValue: Number(portfolio.cash) + getAllHeldTickers().reduce((sum, ticker) => {
         const holding = getHolding(ticker)!
         return sum + holding.shares * (livePrices[ticker] || holding.avgPrice)
       }, 0),
@@ -678,16 +732,13 @@ export default function Dashboard() {
     setChatLoading(false)
   }
 
+  // Share-weighted average cost basis (see lib/portfolio.ts)
   function getHolding(ticker: string) {
-    const tickerTrades = trades.filter(tr => tr.ticker === ticker)
-    if (tickerTrades.length === 0) return null
-    const shares = tickerTrades.reduce((sum, tr) => sum + tr.shares, 0)
-    const avgPrice = tickerTrades.reduce((sum, tr) => sum + tr.price_at_purchase, 0) / tickerTrades.length
-    return { shares, avgPrice }
+    return computeHolding(trades, ticker)
   }
 
   function getAllHeldTickers() {
-    return [...new Set(trades.map(tr => tr.ticker))]
+    return heldTickers(trades)
   }
 
   async function handleLogout() {
@@ -705,7 +756,7 @@ export default function Dashboard() {
       setMessage('Maximum deposit is $1,000,000')
       return
     }
-    const newCash = portfolio.cash + amount
+    const newCash = Number(portfolio.cash) + amount
     await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
     setPortfolio({ ...portfolio, cash: newCash })
     setShowDepositModal(false)
@@ -1461,7 +1512,7 @@ export default function Dashboard() {
               color: totalPnl >= 0 ? (darkMode ? '#6ee7b7' : '#10b981') : (darkMode ? '#f87171' : '#ef4444'),
               letterSpacing: '-0.3px'
             }}>
-              {totalPnl >= 0 ? '+' : ''}${formatCurrency(Math.abs(totalPnl))}
+              {totalPnl >= 0 ? '+' : '-'}${formatCurrency(Math.abs(totalPnl))}
             </p>
           </div>
         </div>
@@ -2064,7 +2115,7 @@ export default function Dashboard() {
                               margin: 0,
                               fontWeight: 700
                             }}>
-                              {gain >= 0 ? '+' : ''}${formatCurrency(Math.abs(gain))}
+                              {gain >= 0 ? '+' : '-'}${formatCurrency(Math.abs(gain))}
                             </p>
                             <p style={{
                               color: gain >= 0 ? '#10b981' : '#ef4444',
@@ -2140,16 +2191,15 @@ export default function Dashboard() {
                   }}>
                     <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 14, fontWeight: 500 }}>Realised P&L</p>
                     {(() => {
-                      const realised = tradeHistory
-                        .filter(h => h.action === 'SELL' && h.profit_loss !== null)
-                        .reduce((sum, h) => sum + h.profit_loss, 0)
+                      // profit_loss may be a numeric string; summing with `+` concatenated
+                      const realised = computeTradeStats(tradeHistory).realizedPnL
                       return <p style={{
                         fontSize: 32,
                         fontWeight: 700,
                         margin: 0,
                         color: realised >= 0 ? '#10b981' : '#ef4444'
                       }}>
-                        {realised >= 0 ? '+' : ''}${formatCurrency(Math.abs(realised))}
+                        {realised >= 0 ? '+' : '-'}${formatCurrency(Math.abs(realised))}
                       </p>
                     })()}
                   </div>
@@ -2162,10 +2212,9 @@ export default function Dashboard() {
                   }}>
                     <p style={{ color: t.subtext, margin: '0 0 10px 0', fontSize: 14, fontWeight: 500 }}>Winning Trades</p>
                     {(() => {
-                      const sells = tradeHistory.filter(h => h.action === 'SELL' && h.profit_loss !== null)
-                      const wins = sells.filter(h => h.profit_loss > 0).length
+                      const stats = computeTradeStats(tradeHistory)
                       return <p style={{ fontSize: 32, fontWeight: 700, margin: 0, color: t.text }}>
-                        {wins}/{sells.length}
+                        {stats.wins}/{stats.closedTrades}
                       </p>
                     })()}
                   </div>
@@ -2243,7 +2292,7 @@ export default function Dashboard() {
                                 color: h.profit_loss === null ? t.subtext : h.profit_loss >= 0 ? '#10b981' : '#ef4444',
                                 fontWeight: 700
                               }}>
-                                {h.profit_loss === null ? '—' : `${h.profit_loss >= 0 ? '+' : ''}$${formatCurrency(Math.abs(parseFloat(h.profit_loss)))}`}
+                                {h.profit_loss === null ? '—' : `${parseFloat(h.profit_loss) >= 0 ? '+' : '-'}$${formatCurrency(Math.abs(parseFloat(h.profit_loss)))}`}
                               </span>
                             </div>
                           ))}
@@ -2449,33 +2498,56 @@ export default function Dashboard() {
               boxShadow: darkMode ? '0 4px 20px rgba(0, 0, 0, 0.4)' : '0 2px 12px rgba(0, 0, 0, 0.06)'
             }}>
               <h3 style={{ margin: '0 0 24px 0', fontSize: 20, fontWeight: 600 }}>Performance Statistics</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
-                <div>
-                  <p style={{ color: t.subtext, margin: '0 0 8px 0', fontSize: 14, fontWeight: 500 }}>Total Trades</p>
-                  <p style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>{tradeHistory.length}</p>
-                </div>
-                <div>
-                  <p style={{ color: t.subtext, margin: '0 0 8px 0', fontSize: 14, fontWeight: 500 }}>Winning Trades</p>
-                  <p style={{ fontSize: 28, fontWeight: 700, margin: 0, color: '#10b981' }}>
-                    {tradeHistory.filter(t => t.profit_loss && parseFloat(t.profit_loss) > 0).length}
-                  </p>
-                </div>
-                <div>
-                  <p style={{ color: t.subtext, margin: '0 0 8px 0', fontSize: 14, fontWeight: 500 }}>Losing Trades</p>
-                  <p style={{ fontSize: 28, fontWeight: 700, margin: 0, color: '#ef4444' }}>
-                    {tradeHistory.filter(t => t.profit_loss && parseFloat(t.profit_loss) < 0).length}
-                  </p>
-                </div>
-                <div>
-                  <p style={{ color: t.subtext, margin: '0 0 8px 0', fontSize: 14, fontWeight: 500 }}>Win Rate</p>
-                  <p style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>
-                    {tradeHistory.filter(t => t.profit_loss !== null).length > 0
-                      ? ((tradeHistory.filter(t => t.profit_loss && parseFloat(t.profit_loss) > 0).length /
-                        tradeHistory.filter(t => t.profit_loss !== null).length) * 100).toFixed(1) + '%'
-                      : '—'}
-                  </p>
-                </div>
-              </div>
+              {(() => {
+                const stats = computeTradeStats(tradeHistory)
+                const dd = computeDrawdown(portfolioSnapshots)
+                const money = (v: number | null) =>
+                  v === null ? '—' : `${v >= 0 ? '+' : '-'}$${formatCurrency(Math.abs(v))}`
+                const items: { label: string, value: string, color?: string, hint?: string }[] = [
+                  { label: 'Total Trades', value: String(tradeHistory.length), hint: 'Buys + sells' },
+                  { label: 'Closed Trades', value: String(stats.closedTrades), hint: 'Sells with realised P&L' },
+                  { label: 'Winning Trades', value: String(stats.wins), color: '#10b981' },
+                  { label: 'Losing Trades', value: String(stats.losses), color: '#ef4444' },
+                  {
+                    label: 'Win Rate',
+                    // win rate over closed trades only; BUY rows have no P&L
+                    value: stats.winRate === null ? '—' : (stats.winRate * 100).toFixed(1) + '%',
+                  },
+                  {
+                    label: 'Profit Factor',
+                    value: stats.profitFactor === null ? '—' : stats.profitFactor === Infinity ? '∞' : stats.profitFactor.toFixed(2),
+                    hint: 'Gross profit ÷ gross loss',
+                  },
+                  { label: 'Expectancy', value: money(stats.expectancy), hint: 'Average P&L per closed trade' },
+                  {
+                    label: 'Avg Win / Avg Loss',
+                    value: `${stats.avgWin === null ? '—' : '$' + formatCurrency(stats.avgWin)} / ${stats.avgLoss === null ? '—' : '$' + formatCurrency(Math.abs(stats.avgLoss))}`,
+                  },
+                  { label: 'Largest Win', value: money(stats.largestWin), color: '#10b981' },
+                  { label: 'Largest Loss', value: money(stats.largestLoss), color: '#ef4444' },
+                  {
+                    label: 'Max Drawdown',
+                    value: portfolioSnapshots.length < 2 ? '—' : `-${(dd.maxDrawdown * 100).toFixed(2)}%`,
+                    color: '#ef4444',
+                    hint: 'Largest peak-to-trough fall in portfolio value (from snapshots)',
+                  },
+                  {
+                    label: 'Current Drawdown',
+                    value: portfolioSnapshots.length < 2 ? '—' : `-${(dd.currentDrawdown * 100).toFixed(2)}%`,
+                    hint: 'Distance below the highest recorded portfolio value',
+                  },
+                ]
+                return (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 24 }}>
+                    {items.map(item => (
+                      <div key={item.label} title={item.hint}>
+                        <p style={{ color: t.subtext, margin: '0 0 8px 0', fontSize: 14, fontWeight: 500 }}>{item.label}</p>
+                        <p style={{ fontSize: 28, fontWeight: 700, margin: 0, color: item.color }}>{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
           </div>
         )}
