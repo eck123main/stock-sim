@@ -242,3 +242,115 @@ pass.
 - Queue market orders placed outside regular hours for the next open.
 - Holidays and early closes are hard-coded through 2027; extend the list
   or compute it.
+
+## Round 3 — 2026-11-18 (same branch)
+
+The tree was clean at the start, with no unfinished work. Six commits.
+Tests went from 44 to 63 (new files `benchmark` and `fills`, plus
+additions to `market` and `returns`), and all pass.
+
+### What I changed and why
+1. **The NYSE calendar is computed from the rules** (`f2bebf1`). The
+   holiday list ran out after 2027, so from 2028 every holiday would have
+   shown as a trading day. `lib/market.ts` now works the dates out from
+   NYSE Rule 7.2:
+   - Fixed-date holidays move to Friday when they fall on a Saturday and
+     to Monday on a Sunday. The exception is New Year's Day on a Saturday,
+     which is not observed at all, so Dec 31 is a normal trading day.
+   - The rest are nth-weekday holidays, plus Good Friday (via the Easter
+     date) and Juneteenth (from 2022).
+   - Early closes are July 3 and Dec 24 when they are trading days, plus
+     the day after Thanksgiving.
+   - `EXTRA_CLOSURES` holds unscheduled closures, e.g. 2025-01-09.
+
+   Tests compare the output with the official 2026–2028 calendar,
+   including the 2028 New Year's exception and the 2028-07-03 early close.
+2. **Benchmark comparison against SPY** (`1f7ce8b`, `46b6b99`). A return
+   alone doesn't say whether the user beat simply holding the index.
+   - The new `lib/benchmark.ts` reports, over the same window, the
+     portfolio's time-weighted return, SPY's return and the excess return.
+     With 10+ day-to-day intervals it adds beta and correlation, and with
+     30+ days annualised Jensen's alpha (risk-free rate 0).
+   - Each snapshot is compared with SPY's last close at or before it, so
+     there is no look-ahead: a snapshot at 10:00 ET uses yesterday's
+     close. Both series are reduced to one point per New York day.
+   - It reuses the same chain-linked growth index as the TWR (the new
+     `twrGrowthSeries`), so deposits don't distort it either.
+   - The dashboard shows four new rows. SPY daily bars come from Twelve
+     Data `/time_series` and are cached in localStorage per NY day, which
+     costs about one API credit a day.
+3. **A daily valuation snapshot** (`46b6b99`). Snapshots only happened on
+   trades and deposits, so a quiet account's "daily" returns could each
+   cover weeks. A price refresh now saves one snapshot per New York day
+   (`shouldTakeValuationSnapshot`), but only when every holding got a
+   price; otherwise the value would fall back to cost.
+4. **Resting orders fill if their price was reached while the user was
+   offline** (`aa052d6`, `f0b576b`). Before, a pending order was checked
+   only against the last price at refresh. A limit buy at $95 on a stock
+   that dipped to $93 and recovered never filled.
+   - `lib/fills.ts` replays the last 30 completed daily bars after the
+     order was placed, using the usual OHLC bar model:
+     - limit orders must trade **through** the price (a touch is not
+       enough) and fill at the limit, or at the open if the stock gapped
+       through it;
+     - stops trigger on a touch and fill at the stop, or at the open on
+       a gap down;
+     - the bar for the day the order was placed is ignored, because its
+       high and low may have come before the order.
+   - Replays run in date order. When a stop and a limit sell both trigger
+     on the same bar, the stop goes first (assume the worse case).
+   - The new `fillOverrides` parameter on `planOrderExecutions` carries
+     these prices, and they still go through the slippage and commission
+     model.
+5. **Daily returns are grouped by New York day, not UTC** (`30c4d4b`).
+   A snapshot at 8 pm ET is already the next day in UTC, which split one
+   session into two days in the volatility, Sharpe and Sortino figures.
+
+### Research
+- NYSE holiday and early-close rules, and the official 2026–2028
+  calendar:
+  - https://www.nyse.com/markets/hours-calendars
+  - https://mondovisione.com/media-and-resources/news/nyse-group-announces-2026-2027-and-2028-holiday-and-early-closings-calendar-20251223
+- Filling orders from OHLC bars: gaps, touch versus trade-through, and
+  the unknown order of events inside a bar:
+  - https://nautilustrader.io/docs/latest/concepts/backtesting/bar-execution/
+  - https://forum.ninjatrader.com/forum/ninjatrader-8/strategy-development/1321733-fill-price-on-limit-order-after-gap
+  - https://mhptrading.com/docs/topics/idh-topic1110.htm
+  - https://www.multicharts.com/discussion/viewtopic.php?p=107675
+
+  Platforms disagree on limits that gap through. I chose to fill at the
+  open, which is what a resting order gets in the opening auction.
+- Beta, alpha and excess return are the standard performance-attribution
+  definitions. I didn't look up a specific source.
+
+### What I could NOT run or test
+- **`tsc`, lint, build and running single test files with `node --test`
+  were all blocked** by the session's permission settings; only
+  `npm test` was allowed. I checked the dashboard edits by reading them.
+  **Run `npm run lint && npm run build` before merging.**
+- I couldn't test against the live Twelve Data API. Parsing `/time_series`
+  follows the documented shape (`values` newest first, string OHLC).
+  SPY bars are **price** returns, without dividends (about 1.3%/yr), so
+  the benchmark is slightly understated. Twelve Data's `adjust` parameter
+  might fix this, but I didn't verify it.
+- **API credits:** an order replay costs one credit per ticker with a
+  pending order placed before today, on top of the refresh's price calls.
+  It is cached once per NY day, plus once more after the close. On the
+  free plan (8 credits/min), a refresh with many such tickers can hit the
+  rate limit. A failed bar fetch is logged and skipped, and the orders
+  are simply checked against the current price as before.
+- When an order fills from a replayed bar, the `trade_history` row gets
+  the refresh time, not the session it filled in. The message to the user
+  names the session.
+- Supabase, again: nothing was exercised end-to-end.
+
+### Ideas for next time
+- Atomic trades via a Postgres RPC with RLS. This is still the biggest
+  integrity gap.
+- Store the actual fill time on `trade_history` for orders filled from
+  replayed bars, and backfill snapshots for those dates.
+- Use dividend-adjusted benchmark data, or add SPY's dividends.
+- Queue market orders placed outside regular hours for the next open.
+  Bars are now available, so the fill could be the next session's open.
+- Let users set the cost settings, or make slippage depend on the stock.
+- Split `app/dashboard/page.tsx` (about 2700 lines) into components.
