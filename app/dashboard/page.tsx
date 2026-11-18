@@ -9,6 +9,7 @@ import { computeHolding, heldTickers, planOrderExecutions, lotsAfterSell } from 
 import { computeTradeStats, computeDrawdown, computeReturnStats, type CashFlow } from '../../lib/metrics'
 import { DEFAULT_COSTS, buyFill, sellFill } from '../../lib/costs'
 import { getMarketSession } from '../../lib/market'
+import { fetchPrices } from '../../lib/quotes'
 
 // How many of the most recent portfolio snapshots to load for charts/metrics.
 const SNAPSHOT_LIMIT = 500
@@ -541,19 +542,21 @@ export default function Dashboard() {
     setNotifications([])
   }
 
-  async function checkPriceAlerts() {
-    if (!user) return
+  // `known` = prices fetched moments ago; only missing tickers are fetched.
+  async function checkPriceAlerts(known: Record<string, number> = {}) {
+    if (!user || priceAlerts.length === 0) return
 
-    // Get prices for all tickers with alerts
-    const alertTickers = [...new Set(priceAlerts.map(a => a.ticker))]
+    const alertTickers = [...new Set(priceAlerts.map(a => a.ticker as string))]
+    const missing = alertTickers.filter(t => !(t in known))
+    const fetched = missing.length
+      ? (await fetchPrices(missing, process.env.NEXT_PUBLIC_TWELVE_DATA_KEY, { delayMs: 500 })).prices
+      : {}
     const prices: Record<string, number> = {}
-
-    for (const ticker of alertTickers) {
-      const result = await searchStock(ticker)
-      if (!result.error && result.price) {
-        prices[ticker] = result.price
-      }
+    for (const t of alertTickers) {
+      const p = known[t] ?? fetched[t]
+      if (p) prices[t] = p
     }
+    if (Object.keys(prices).length === 0) return
 
     // Call API to check and trigger alerts
     // The API verifies who we are from the session token
@@ -596,22 +599,14 @@ export default function Dashboard() {
     const tickersToPrice = [...new Set([
       ...heldTickers(trades),
       ...pendingOrders.map((o: any) => o.ticker as string),
+      ...priceAlerts.map((a: any) => a.ticker as string),
     ])]
     // Keep previously known prices; a failed fetch shouldn't erase them.
-    const prices: Record<string, number> = { ...livePrices }
-    const fresh: Record<string, number> = {}
-    const failed: string[] = []
-
-    for (const ticker of tickersToPrice) {
-      const result = await searchStock(ticker)
-      if (!result.error && result.price) {
-        prices[ticker] = result.price
-        fresh[ticker] = result.price
-      } else {
-        failed.push(ticker)
-      }
-      await new Promise(r => setTimeout(r, 500))
-    }
+    // One batched request per 8 symbols instead of one request per ticker.
+    const { prices: fresh, failed, error: priceError } = await fetchPrices(
+      tickersToPrice, process.env.NEXT_PUBLIC_TWELVE_DATA_KEY, { chunkSize: 8, delayMs: 500 })
+    if (priceError) console.error('Price fetch error:', priceError)
+    const prices: Record<string, number> = { ...livePrices, ...fresh }
 
     setLivePrices(prices)
     // Save to localStorage with timestamp
@@ -626,8 +621,8 @@ export default function Dashboard() {
     // against stale cached prices.
     await checkAndExecuteOrders(fresh)
 
-    // Check price alerts
-    await checkPriceAlerts()
+    // Check price alerts (alert tickers were included in the batch above)
+    await checkPriceAlerts(fresh)
   }
 
   async function handleBuy() {
