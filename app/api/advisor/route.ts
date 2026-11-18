@@ -1,8 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
+
+const MAX_MESSAGE_LENGTH = 2000
 
 export async function POST(req: NextRequest) {
   try {
+    // Only signed-in users may use the (paid) LLM key
+    const authHeader = req.headers.get('authorization') || ''
+    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null
+    if (!token) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const { data: authData, error: authError } = await supabase.auth.getUser(token)
+    if (authError || !authData?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const { message, portfolio } = await req.json()
+    if (typeof message !== 'string' || !message.trim() || message.length > MAX_MESSAGE_LENGTH || !portfolio) {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+    }
 
     const apiKey = process.env.GROQ_API_KEY
     if (!apiKey) {
