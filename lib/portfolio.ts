@@ -1,5 +1,6 @@
 // Pure portfolio / order-execution logic, kept free of React and Supabase so
 // it can be unit tested. The dashboard calls these and then persists results.
+import { buyFill, sellFill, ZERO_COSTS, type ExecutionCosts } from './costs.ts'
 
 export interface Lot {
   ticker: string
@@ -25,10 +26,13 @@ export interface PendingOrder {
 }
 
 export type Execution =
-  | { kind: 'BUY'; order: PendingOrder; ticker: string; price: number; shares: number; cost: number }
+  | {
+      kind: 'BUY'; order: PendingOrder; ticker: string; price: number; shares: number; cost: number
+      commission: number; costPerShare: number
+    }
   | {
       kind: 'SELL'; order: PendingOrder; ticker: string; price: number; shares: number
-      proceeds: number; profitLoss: number; remainingShares: number; avgPrice: number
+      proceeds: number; profitLoss: number; remainingShares: number; avgPrice: number; commission: number
     }
 
 export interface OrderPlan {
@@ -97,6 +101,7 @@ export function planOrderExecutions(
   prices: Record<string, number>,
   cash: number,
   lots: Lot[],
+  costs: ExecutionCosts = ZERO_COSTS,
 ): OrderPlan {
   const positions = new Map<string, { shares: number; avgPrice: number }>()
   for (const t of heldTickers(lots)) {
@@ -121,7 +126,12 @@ export function planOrderExecutions(
         plan.skipped.push({ order, reason: 'insufficient cash' })
         continue
       }
-      const shares = amount / price
+      const fill = buyFill(amount, price, costs, toNum(order.target_price))
+      if (!fill) {
+        plan.cancellations.push({ order, reason: 'amount does not cover commission' })
+        continue
+      }
+      const shares = fill.shares
       plan.cash -= amount
       const pos = positions.get(order.ticker)
       if (pos) {
@@ -129,9 +139,12 @@ export function planOrderExecutions(
         pos.avgPrice = (pos.shares * pos.avgPrice + amount) / total
         pos.shares = total
       } else {
-        positions.set(order.ticker, { shares, avgPrice: price })
+        positions.set(order.ticker, { shares, avgPrice: fill.costPerShare })
       }
-      plan.executions.push({ kind: 'BUY', order, ticker: order.ticker, price, shares, cost: amount })
+      plan.executions.push({
+        kind: 'BUY', order, ticker: order.ticker, price: fill.fillPrice, shares, cost: amount,
+        commission: fill.commission, costPerShare: fill.costPerShare,
+      })
     } else {
       const pos = positions.get(order.ticker)
       if (!pos || pos.shares <= EPS) {
@@ -140,15 +153,16 @@ export function planOrderExecutions(
       }
       const requested = toNum(order.shares)
       const shares = requested > 0 ? Math.min(requested, pos.shares) : pos.shares
-      const proceeds = shares * price
-      const profitLoss = proceeds - shares * pos.avgPrice
+      const limit = order.order_type === 'LIMIT_SELL' ? toNum(order.target_price) : undefined
+      const fill = sellFill(shares, price, pos.avgPrice, costs, limit)
+      const { proceeds, profitLoss, commission } = fill
       pos.shares -= shares
       const remainingShares = pos.shares <= EPS ? 0 : pos.shares
       if (remainingShares === 0) positions.delete(order.ticker)
       plan.cash += proceeds
       plan.executions.push({
-        kind: 'SELL', order, ticker: order.ticker, price, shares,
-        proceeds, profitLoss, remainingShares, avgPrice: pos.avgPrice,
+        kind: 'SELL', order, ticker: order.ticker, price: fill.fillPrice, shares,
+        proceeds, profitLoss, remainingShares, avgPrice: pos.avgPrice, commission,
       })
     }
   }

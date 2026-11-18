@@ -7,6 +7,7 @@ import StockPerformanceChart from '../../components/StockPerformanceChart'
 import PortfolioComposition from '../../components/PortfolioComposition'
 import { computeHolding, heldTickers, planOrderExecutions } from '../../lib/portfolio'
 import { computeTradeStats, computeDrawdown } from '../../lib/metrics'
+import { DEFAULT_COSTS, buyFill, sellFill } from '../../lib/costs'
 import { getMarketSession } from '../../lib/market'
 
 // How many of the most recent portfolio snapshots to load for charts/metrics.
@@ -372,7 +373,7 @@ export default function Dashboard() {
     const ordered = [...pendingOrders].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     )
-    const plan = planOrderExecutions(ordered, prices, Number(portfolio.cash), trades)
+    const plan = planOrderExecutions(ordered, prices, Number(portfolio.cash), trades, DEFAULT_COSTS)
     if (plan.executions.length === 0 && plan.cancellations.length === 0) return
 
     const messages: string[] = []
@@ -383,7 +384,8 @@ export default function Dashboard() {
           ticker: ex.ticker,
           company_name: ex.ticker,
           shares: ex.shares,
-          price_at_purchase: ex.price
+          // cost basis per share includes slippage and commission
+          price_at_purchase: ex.costPerShare
         })
         await supabase.from('trade_history').insert({
           user_id: user.id,
@@ -631,13 +633,17 @@ export default function Dashboard() {
     if (price !== selectedStock.price) setSelectedStock({ ...selectedStock, price })
     setLivePrices(prev => ({ ...prev, [selectedStock.ticker]: price }))
 
-    const shares = dollars / price
+    // Buy at the ask (quote + half-spread slippage); commission is taken
+    // out of the dollar amount. Cost basis includes both.
+    const fill = buyFill(dollars, price, DEFAULT_COSTS)
+    if (!fill) return setMessage('Amount is too small to cover the commission')
+    const shares = fill.shares
     const newCash = Number(portfolio.cash) - dollars
 
     await supabase.from('trades').insert({
       user_id: user.id, ticker: selectedStock.ticker,
       company_name: selectedStock.ticker, shares,
-      price_at_purchase: price,
+      price_at_purchase: fill.costPerShare,
     })
 
     // Log to history
@@ -646,7 +652,7 @@ export default function Dashboard() {
       ticker: selectedStock.ticker,
       action: 'BUY',
       shares,
-      price,
+      price: fill.fillPrice,
       total_value: dollars,
       profit_loss: null,
     }
@@ -654,7 +660,7 @@ export default function Dashboard() {
 
     await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
 
-    const newLot = { ticker: selectedStock.ticker, shares, price_at_purchase: price }
+    const newLot = { ticker: selectedStock.ticker, shares, price_at_purchase: fill.costPerShare }
     setPortfolio({ ...portfolio, cash: newCash })
     setTrades(prev => [...prev, newLot])
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
@@ -682,8 +688,10 @@ export default function Dashboard() {
       return
     }
     setLivePrices(prev => ({ ...prev, [ticker]: price }))
-    const value = holding.shares * price
-    const profitLoss = value - (holding.shares * holding.avgPrice)
+    // Sell at the bid (quote - half-spread slippage), net of commission.
+    const fill = sellFill(holding.shares, price, holding.avgPrice, DEFAULT_COSTS)
+    const value = fill.proceeds
+    const profitLoss = fill.profitLoss
     const newCash = Number(portfolio.cash) + value
 
     await supabase.from('trades').delete().eq('user_id', user.id).eq('ticker', ticker)
@@ -694,7 +702,7 @@ export default function Dashboard() {
       ticker,
       action: 'SELL',
       shares: holding.shares,
-      price,
+      price: fill.fillPrice,
       total_value: value,
       profit_loss: profitLoss,
     }
