@@ -5,6 +5,20 @@ import { computeReturnStats } from '../lib/metrics.ts'
 const close = (a: number | null, b: number, eps = 1e-9) => a !== null && Math.abs(a - b) < eps
 const day = (d: number, h = 20) => new Date(Date.UTC(2026, 0, 1 + d, h)).toISOString()
 
+test('daily buckets follow the New York date, not UTC', () => {
+  // Snapshots at 15:00 ET and 20:00 ET (01:00 UTC next day) on each of 12
+  // days: 12 NY days of returns. Bucketing by UTC would give a 13th "day".
+  const snaps = [{ created_at: '2026-01-05T19:00:00Z', portfolio_value: 100 }]
+  let v = 100
+  for (let d = 6; d <= 17; d++) {
+    v *= 1.01
+    snaps.push({ created_at: `2026-01-${String(d).padStart(2, '0')}T20:00:00Z`, portfolio_value: v })
+    v *= 0.995
+    snaps.push({ created_at: `2026-01-${String(d + 1).padStart(2, '0')}T01:00:00Z`, portfolio_value: v })
+  }
+  assert.equal(computeReturnStats(snaps).days, 12)
+})
+
 test('deposit is not counted as a gain', () => {
   const snaps = [
     { created_at: day(0), portfolio_value: 10_000 },

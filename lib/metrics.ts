@@ -1,4 +1,5 @@
 // Performance metrics computed from trade history and portfolio snapshots.
+import { nyDateTime } from './market.ts'
 
 export interface HistoryEntry {
   action: string
@@ -156,7 +157,7 @@ const DAY_MS = 86_400_000
  * A flow is assigned to the first snapshot taken at or after it (the
  * dashboard snapshots right after each deposit, so this is exact).
  *
- * Sub-period returns are compounded into one return per calendar day (UTC)
+ * Sub-period returns are compounded into one return per New York calendar day
  * before computing volatility/Sharpe/Sortino, since snapshots are taken at
  * irregular times (on every trade). Ratios need at least `minDays` daily
  * returns, otherwise they are null: a handful of points gives meaningless
@@ -239,7 +240,9 @@ export function computeReturnStats(
     growth *= r
     if (growth > peak) peak = growth
     maxDrawdown = Math.max(maxDrawdown, (peak - growth) / peak)
-    const day = new Date(snaps[i].t).toISOString().slice(0, 10)
+    // Bucket by New York trading date, not UTC: an 8 pm ET snapshot is
+    // already "tomorrow" in UTC and would split one session across two days.
+    const day = nyDateTime(new Date(snaps[i].t)).ymd
     daily.set(day, (daily.get(day) ?? 1) * r)
   }
 
