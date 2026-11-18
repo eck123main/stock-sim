@@ -5,7 +5,7 @@ import { searchStock } from '../../lib/stocks'
 import PortfolioChart from '../../components/PortfolioChart'
 import StockPerformanceChart from '../../components/StockPerformanceChart'
 import PortfolioComposition from '../../components/PortfolioComposition'
-import { computeHolding, heldTickers, planOrderExecutions } from '../../lib/portfolio'
+import { computeHolding, heldTickers, planOrderExecutions, lotsAfterSell } from '../../lib/portfolio'
 import { computeTradeStats, computeDrawdown, computeReturnStats, type CashFlow } from '../../lib/metrics'
 import { DEFAULT_COSTS, buyFill, sellFill } from '../../lib/costs'
 import { getMarketSession } from '../../lib/market'
@@ -63,6 +63,7 @@ export default function Dashboard() {
   const [trades, setTrades] = useState<any[]>([])
   const [tradeHistory, setTradeHistory] = useState<any[]>([])
   const [cashFlows, setCashFlows] = useState<CashFlow[]>([])
+  const [sellShares, setSellShares] = useState('')
   const [loading, setLoading] = useState(true)
   const [selectedStock, setSelectedStock] = useState<any>(null)
   const [livePrices, setLivePrices] = useState<Record<string, number>>({})
@@ -685,7 +686,7 @@ export default function Dashboard() {
     })
   }
 
-  async function handleSell(ticker: string) {
+  async function handleSell(ticker: string, sharesToSell?: number) {
     const holding = getHolding(ticker)
     if (!holding) return
     // Sell at a freshly fetched market price. Previously this silently fell
@@ -698,20 +699,34 @@ export default function Dashboard() {
       return
     }
     setLivePrices(prev => ({ ...prev, [ticker]: price }))
+    // Partial sell if a share count below the position size is given.
+    const requested = sharesToSell !== undefined && sharesToSell > 0 ? sharesToSell : holding.shares
+    const qty = Math.min(requested, holding.shares)
+    const sellingAll = holding.shares - qty <= 1e-9
+
     // Sell at the bid (quote - half-spread slippage), net of commission.
-    const fill = sellFill(holding.shares, price, holding.avgPrice, DEFAULT_COSTS)
+    const fill = sellFill(qty, price, holding.avgPrice, DEFAULT_COSTS)
     const value = fill.proceeds
     const profitLoss = fill.profitLoss
     const newCash = Number(portfolio.cash) + value
 
+    // Average-cost accounting: the remaining shares become one lot at the
+    // unchanged average cost.
+    const remainingLots = lotsAfterSell(trades, ticker, qty)
     await supabase.from('trades').delete().eq('user_id', user.id).eq('ticker', ticker)
+    if (!sellingAll) {
+      await supabase.from('trades').insert({
+        user_id: user.id, ticker, company_name: ticker,
+        shares: holding.shares - qty, price_at_purchase: holding.avgPrice,
+      })
+    }
 
     // Log to history
     const historyEntry = {
       user_id: user.id,
       ticker,
       action: 'SELL',
-      shares: holding.shares,
+      shares: qty,
       price: fill.fillPrice,
       total_value: value,
       profit_loss: profitLoss,
@@ -721,15 +736,21 @@ export default function Dashboard() {
     await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
 
     setPortfolio({ ...portfolio, cash: newCash })
-    setTrades(prev => prev.filter(tr => tr.ticker !== ticker))
+    if (sellingAll) {
+      setTrades(prev => prev.filter(tr => tr.ticker !== ticker))
+    } else {
+      const { data: tradesData } = await supabase.from('trades').select('*').eq('user_id', user.id)
+      setTrades(tradesData || remainingLots)
+    }
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
-    if (selectedStock?.ticker === ticker) setSelectedStock(null)
-    setMessage(`✅ Sold all ${ticker} for $${formatCurrency(value)}! P&L: ${profitLoss >= 0 ? '+' : '-'}$${formatCurrency(Math.abs(profitLoss))}${marketClosedNote()}`)
+    if (sellingAll && selectedStock?.ticker === ticker) setSelectedStock(null)
+    setSellShares('')
+    setMessage(`✅ Sold ${sellingAll ? 'all' : qty.toFixed(4) + ' shares of'} ${ticker} for $${formatCurrency(value)}! P&L: ${profitLoss >= 0 ? '+' : '-'}$${formatCurrency(Math.abs(profitLoss))}${marketClosedNote()}`)
 
     // Save portfolio snapshot with the post-trade state
     savePortfolioSnapshot({
       cash: newCash,
-      lots: trades.filter(tr => tr.ticker !== ticker),
+      lots: remainingLots,
       prices: { ...livePrices, [ticker]: price },
     })
   }
@@ -1997,6 +2018,42 @@ export default function Dashboard() {
                     }}>
                     Buy {selectedStock.ticker}
                   </button>
+                  {getHolding(selectedStock.ticker) && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                      <input type="number" min="0" step="any"
+                        placeholder={`Shares to sell (max ${getHolding(selectedStock.ticker)!.shares.toFixed(4)})`}
+                        value={sellShares}
+                        onChange={e => setSellShares(e.target.value)}
+                        style={{
+                          flex: 1,
+                          padding: '14px 18px',
+                          borderRadius: 12,
+                          border: `2px solid ${t.inputBorder}`,
+                          fontFamily: 'inherit',
+                          background: t.input,
+                          color: t.text,
+                          boxSizing: 'border-box' as const,
+                          fontSize: 16
+                        }} />
+                      <button
+                        disabled={!(parseFloat(sellShares) > 0)}
+                        onClick={() => handleSell(selectedStock.ticker, parseFloat(sellShares))}
+                        style={{
+                          padding: '14px 18px',
+                          background: '#ef4444',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: 12,
+                          cursor: parseFloat(sellShares) > 0 ? 'pointer' : 'not-allowed',
+                          opacity: parseFloat(sellShares) > 0 ? 1 : 0.5,
+                          fontFamily: 'inherit',
+                          fontSize: 16,
+                          fontWeight: 600,
+                        }}>
+                        Sell
+                      </button>
+                    </div>
+                  )}
                   {getHolding(selectedStock.ticker) && (
                     <button onClick={() => handleSell(selectedStock.ticker)}
                       style={{
