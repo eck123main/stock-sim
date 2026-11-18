@@ -122,6 +122,37 @@ function nyParts(date: Date) {
   }
 }
 
+/** New York calendar date (YYYY-MM-DD) and minutes after midnight. */
+export function nyDateTime(date: Date): { ymd: string; minutes: number } {
+  const { ymd, minutes } = nyParts(date)
+  return { ymd, minutes }
+}
+
+/** Regular-session close on a trading day, in minutes after NY midnight. */
+export function sessionCloseMinutes(ymd: string): number {
+  return isEarlyClose(ymd) ? 13 * 60 : 16 * 60
+}
+
+/**
+ * Should a refresh record a mark-to-market snapshot? Snapshots used to be
+ * taken only on trades and deposits, so an inactive account had a handful
+ * of irregular points and its daily volatility/Sharpe/beta were computed
+ * from multi-week "daily" returns. Take at most one valuation snapshot per
+ * New York day, and only when every held position was actually priced
+ * (otherwise holdings fall back to cost and the value is wrong).
+ */
+export function shouldTakeValuationSnapshot(
+  lastSnapshotAt: string | null | undefined,
+  now: Date,
+  allHoldingsPriced: boolean,
+): boolean {
+  if (!allHoldingsPriced) return false
+  if (!lastSnapshotAt) return true
+  const last = new Date(lastSnapshotAt)
+  if (!Number.isFinite(last.getTime())) return true
+  return nyParts(last).ymd !== nyParts(now).ymd
+}
+
 export function getMarketSession(date: Date = new Date()): MarketSession {
   const { ymd, weekday, minutes } = nyParts(date)
   if (weekday === 'Sat' || weekday === 'Sun' || !isTradingDay(ymd)) return 'closed'

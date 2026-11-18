@@ -162,6 +162,44 @@ const DAY_MS = 86_400_000
  * returns, otherwise they are null: a handful of points gives meaningless
  * numbers. `riskFreeRate` is annual.
  */
+export interface GrowthPoint {
+  /** epoch ms of the snapshot */
+  t: number
+  /** time-weighted growth index, 1 at the first snapshot */
+  growth: number
+  /** snapshot value */
+  value: number
+}
+
+/**
+ * Time-weighted growth index at every usable snapshot (same chain-linking
+ * as computeReturnStats). Used to compare against a benchmark.
+ */
+export function twrGrowthSeries(snapshots: Snapshot[], flows: CashFlow[] = []): GrowthPoint[] {
+  const snaps = [...snapshots]
+    .map(s => ({ t: new Date(s.created_at).getTime(), v: num(s.portfolio_value) }))
+    .filter((s): s is { t: number; v: number } => Number.isFinite(s.t) && s.v !== null && s.v > 0)
+    .sort((a, b) => a.t - b.t)
+  const cfs = flows
+    .map(f => ({ t: new Date(f.created_at).getTime(), a: num(f.amount) ?? 0 }))
+    .filter(f => Number.isFinite(f.t) && f.a !== 0)
+    .sort((a, b) => a.t - b.t)
+  if (!snaps.length) return []
+  let fi = 0
+  while (fi < cfs.length && cfs[fi].t <= snaps[0].t) fi++
+  const out: GrowthPoint[] = [{ t: snaps[0].t, growth: 1, value: snaps[0].v }]
+  let growth = 1
+  for (let i = 1; i < snaps.length; i++) {
+    let cf = 0
+    while (fi < cfs.length && cfs[fi].t <= snaps[i].t) cf += cfs[fi++].a
+    const r = (snaps[i].v - cf) / snaps[i - 1].v
+    if (!Number.isFinite(r) || r <= 0) continue
+    growth *= r
+    out.push({ t: snaps[i].t, growth, value: snaps[i].v })
+  }
+  return out
+}
+
 export function computeReturnStats(
   snapshots: Snapshot[],
   flows: CashFlow[] = [],
