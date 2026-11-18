@@ -20,6 +20,14 @@ export interface Bar {
   /** New York trading date, YYYY-MM-DD */
   date: string
   close: number
+  open?: number
+  high?: number
+  low?: number
+}
+
+function optNum(v: unknown): number | undefined {
+  const n = parseFloat(String(v))
+  return Number.isFinite(n) && n > 0 ? n : undefined
 }
 
 /**
@@ -31,10 +39,16 @@ export function parseTimeSeries(data: unknown): { bars: Bar[]; error?: string } 
   if (d.status === 'error') return { bars: [], error: d.message || 'time series request failed' }
   if (!Array.isArray(d.values)) return { bars: [], error: 'no values in time series response' }
   const bars: Bar[] = []
-  for (const v of d.values as { datetime?: unknown; close?: unknown }[]) {
+  for (const v of d.values as Record<string, unknown>[]) {
     const date = typeof v?.datetime === 'string' ? v.datetime.slice(0, 10) : ''
     const close = parseFloat(String(v?.close))
-    if (/^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(close) && close > 0) bars.push({ date, close })
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(close) || close <= 0) continue
+    const bar: Bar = { date, close }
+    const open = optNum(v.open), high = optNum(v.high), low = optNum(v.low)
+    if (open !== undefined) bar.open = open
+    if (high !== undefined) bar.high = high
+    if (low !== undefined) bar.low = low
+    bars.push(bar)
   }
   bars.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
   // drop duplicate dates (keep the last)

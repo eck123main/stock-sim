@@ -116,6 +116,12 @@ export function planOrderExecutions(
   cash: number,
   lots: Lot[],
   costs: ExecutionCosts = ZERO_COSTS,
+  /**
+   * Per-order raw fill prices for orders already known to have triggered
+   * (e.g. from daily bars, see lib/fills.ts). They bypass the trigger check
+   * against `prices`. Keyed by order id.
+   */
+  fillOverrides: Record<string, number> = {},
 ): OrderPlan {
   const positions = new Map<string, { shares: number; avgPrice: number }>()
   for (const t of heldTickers(lots)) {
@@ -126,9 +132,10 @@ export function planOrderExecutions(
   const plan: OrderPlan = { executions: [], cancellations: [], skipped: [], cash }
 
   for (const order of orders) {
-    const price = prices[order.ticker]
+    const override = fillOverrides[order.id]
+    const price = override > 0 ? override : prices[order.ticker]
     if (!price || price <= 0) continue
-    if (!isTriggered(order, price)) continue
+    if (!(override > 0) && !isTriggered(order, price)) continue
 
     if (order.order_type === 'LIMIT_BUY') {
       const amount = toNum(order.amount)
