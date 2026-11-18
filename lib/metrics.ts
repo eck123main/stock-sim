@@ -116,6 +116,132 @@ export function computeDrawdown(snapshots: Snapshot[]): DrawdownStats {
   }
 }
 
+export interface CashFlow {
+  created_at: string
+  /** Positive for deposits, negative for withdrawals. */
+  amount: number | string
+}
+
+export interface ReturnStats {
+  /** Cumulative time-weighted return (0.1 = +10%); null if < 2 snapshots. */
+  twr: number | null
+  /** Annualised TWR; null if the history spans less than 30 days. */
+  annualizedReturn: number | null
+  /** Ending value - starting value - net deposits over the snapshot window. */
+  investmentGain: number | null
+  netDeposits: number
+  /** Max drawdown of the time-weighted growth index (immune to deposits/withdrawals). */
+  maxDrawdown: number
+  /** Number of daily returns used for the risk ratios. */
+  days: number
+  /** Annualised standard deviation of daily returns. */
+  volatility: number | null
+  /** Annualised Sharpe ratio (daily excess mean / stdev * sqrt(252)). */
+  sharpe: number | null
+  /** Annualised Sortino ratio (downside deviation vs. the risk-free rate). */
+  sortino: number | null
+}
+
+const TRADING_DAYS = 252
+const DAY_MS = 86_400_000
+
+/**
+ * Time-weighted return and risk ratios from portfolio snapshots and
+ * external cash flows (deposits/withdrawals).
+ *
+ * A raw "value now / value then" return counts deposits as profit. TWR
+ * instead splits the history at every snapshot, removes any cash flow that
+ * happened inside a sub-period, and chain-links the sub-period returns:
+ *   r_i = (V_i - CF_i) / V_{i-1} - 1,   TWR = prod(1 + r_i) - 1
+ * A flow is assigned to the first snapshot taken at or after it (the
+ * dashboard snapshots right after each deposit, so this is exact).
+ *
+ * Sub-period returns are compounded into one return per calendar day (UTC)
+ * before computing volatility/Sharpe/Sortino, since snapshots are taken at
+ * irregular times (on every trade). Ratios need at least `minDays` daily
+ * returns, otherwise they are null: a handful of points gives meaningless
+ * numbers. `riskFreeRate` is annual.
+ */
+export function computeReturnStats(
+  snapshots: Snapshot[],
+  flows: CashFlow[] = [],
+  opts: { riskFreeRate?: number; minDays?: number } = {},
+): ReturnStats {
+  const { riskFreeRate = 0, minDays = 10 } = opts
+  const snaps = [...snapshots]
+    .map(s => ({ t: new Date(s.created_at).getTime(), v: num(s.portfolio_value) }))
+    .filter((s): s is { t: number; v: number } => Number.isFinite(s.t) && s.v !== null && s.v > 0)
+    .sort((a, b) => a.t - b.t)
+  const cfs = flows
+    .map(f => ({ t: new Date(f.created_at).getTime(), a: num(f.amount) ?? 0 }))
+    .filter(f => Number.isFinite(f.t) && f.a !== 0)
+    .sort((a, b) => a.t - b.t)
+
+  const empty: ReturnStats = {
+    twr: null, annualizedReturn: null, investmentGain: null, netDeposits: 0, maxDrawdown: 0,
+    days: 0, volatility: null, sharpe: null, sortino: null,
+  }
+  if (snaps.length < 2) return empty
+
+  // Flows strictly after the first snapshot and at/before the last one.
+  let fi = 0
+  while (fi < cfs.length && cfs[fi].t <= snaps[0].t) fi++
+
+  let growth = 1
+  let peak = 1
+  let maxDrawdown = 0
+  let netDeposits = 0
+  const daily = new Map<string, number>() // UTC day -> growth factor
+  for (let i = 1; i < snaps.length; i++) {
+    let cf = 0
+    while (fi < cfs.length && cfs[fi].t <= snaps[i].t) cf += cfs[fi++].a
+    netDeposits += cf
+    const r = (snaps[i].v - cf) / snaps[i - 1].v
+    if (!Number.isFinite(r) || r <= 0) continue
+    growth *= r
+    if (growth > peak) peak = growth
+    maxDrawdown = Math.max(maxDrawdown, (peak - growth) / peak)
+    const day = new Date(snaps[i].t).toISOString().slice(0, 10)
+    daily.set(day, (daily.get(day) ?? 1) * r)
+  }
+
+  const first = snaps[0]
+  const last = snaps[snaps.length - 1]
+  const twr = growth - 1
+  const years = (last.t - first.t) / (365.25 * DAY_MS)
+  const annualizedReturn = years >= 30 / 365.25 ? Math.pow(growth, 1 / years) - 1 : null
+
+  const rets = [...daily.values()].map(g => g - 1)
+  const n = rets.length
+  let volatility: number | null = null
+  let sharpe: number | null = null
+  let sortino: number | null = null
+  if (n >= minDays) {
+    const rf = Math.pow(1 + riskFreeRate, 1 / TRADING_DAYS) - 1
+    const excess = rets.map(r => r - rf)
+    const mean = excess.reduce((a, b) => a + b, 0) / n
+    const rawMean = rets.reduce((a, b) => a + b, 0) / n
+    const variance = rets.reduce((a, r) => a + (r - rawMean) ** 2, 0) / (n - 1)
+    const sd = Math.sqrt(variance)
+    const downside = Math.sqrt(excess.reduce((a, r) => a + Math.min(r, 0) ** 2, 0) / n)
+    volatility = sd * Math.sqrt(TRADING_DAYS)
+    sharpe = sd > 0 ? (mean / sd) * Math.sqrt(TRADING_DAYS) : null
+    sortino = downside > 0 ? (mean / downside) * Math.sqrt(TRADING_DAYS) : null
+  }
+
+  return {
+    twr,
+    annualizedReturn,
+    investmentGain: last.v - first.v - netDeposits,
+    netDeposits,
+    maxDrawdown,
+    days: n,
+    volatility,
+    sharpe,
+    sortino,
+  }
+}
+
 /** Return on cost for open positions: unrealised P&L / cost basis. */
 export function unrealizedReturn(marketValue: number, costBasis: number): number | null {
   if (costBasis <= 0) return null

@@ -6,7 +6,7 @@ import PortfolioChart from '../../components/PortfolioChart'
 import StockPerformanceChart from '../../components/StockPerformanceChart'
 import PortfolioComposition from '../../components/PortfolioComposition'
 import { computeHolding, heldTickers, planOrderExecutions } from '../../lib/portfolio'
-import { computeTradeStats, computeDrawdown } from '../../lib/metrics'
+import { computeTradeStats, computeDrawdown, computeReturnStats, type CashFlow } from '../../lib/metrics'
 import { DEFAULT_COSTS, buyFill, sellFill } from '../../lib/costs'
 import { getMarketSession } from '../../lib/market'
 
@@ -62,6 +62,7 @@ export default function Dashboard() {
   const [portfolio, setPortfolio] = useState<any>(null)
   const [trades, setTrades] = useState<any[]>([])
   const [tradeHistory, setTradeHistory] = useState<any[]>([])
+  const [cashFlows, setCashFlows] = useState<CashFlow[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStock, setSelectedStock] = useState<any>(null)
   const [livePrices, setLivePrices] = useState<Record<string, number>>({})
@@ -138,7 +139,7 @@ export default function Dashboard() {
       if (historyError) {
         console.error('Error fetching trade history:', historyError)
       }
-      setTradeHistory(historyData || [])
+      applyHistory(historyData || [])
 
       // Fetch portfolio snapshots (most recent ones; see fetchRecentSnapshots)
       setPortfolioSnapshots(await fetchRecentSnapshots(user.id))
@@ -234,6 +235,15 @@ export default function Dashboard() {
 
     // Fetch updated snapshots
     setPortfolioSnapshots(await fetchRecentSnapshots(user.id))
+  }
+
+  // trade_history also stores deposits (action 'DEPOSIT') so returns can be
+  // time-weighted; keep them out of the trade list and trade statistics.
+  function applyHistory(rows: any[]) {
+    setTradeHistory(rows.filter(r => r.action === 'BUY' || r.action === 'SELL'))
+    setCashFlows(rows
+      .filter(r => r.action === 'DEPOSIT')
+      .map(r => ({ created_at: r.created_at, amount: r.total_value })))
   }
 
   // Newest SNAPSHOT_LIMIT snapshots in chronological order. Ordering
@@ -453,7 +463,7 @@ export default function Dashboard() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(10000)
-      setTradeHistory(historyData || [])
+      applyHistory(historyData || [])
     }
     if (messages.length) setMessage(messages.join(' · '))
 
@@ -790,8 +800,29 @@ export default function Dashboard() {
       return
     }
     const newCash = Number(portfolio.cash) + amount
-    await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
+    const { error } = await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
+    if (error) {
+      setMessage('Deposit failed, please try again')
+      return
+    }
     setPortfolio({ ...portfolio, cash: newCash })
+
+    // Record the deposit as an external cash flow so performance metrics
+    // (time-weighted return, Sharpe, drawdown) don't count it as profit, then
+    // snapshot right after it so the flow falls on a sub-period boundary.
+    const now = new Date().toISOString()
+    const { error: flowError } = await supabase.from('trade_history').insert({
+      user_id: user.id,
+      ticker: 'CASH',
+      action: 'DEPOSIT',
+      shares: 0,
+      price: 0,
+      total_value: amount,
+      profit_loss: null,
+    })
+    if (flowError) console.error('Could not record deposit cash flow:', flowError)
+    else setCashFlows(prev => [...prev, { created_at: now, amount }])
+    savePortfolioSnapshot({ cash: newCash })
     setShowDepositModal(false)
     setDepositAmount('')
     setMessage(`💰 Deposited $${formatCurrency(amount)}`)
@@ -2534,6 +2565,10 @@ export default function Dashboard() {
               {(() => {
                 const stats = computeTradeStats(tradeHistory)
                 const dd = computeDrawdown(portfolioSnapshots)
+                const rs = computeReturnStats(portfolioSnapshots, cashFlows)
+                const pct = (v: number | null) =>
+                  v === null ? '—' : `${v >= 0 ? '+' : '-'}${(Math.abs(v) * 100).toFixed(2)}%`
+                const ratio = (v: number | null) => (v === null ? '—' : v.toFixed(2))
                 const money = (v: number | null) =>
                   v === null ? '—' : `${v >= 0 ? '+' : '-'}$${formatCurrency(Math.abs(v))}`
                 const items: { label: string, value: string, color?: string, hint?: string }[] = [
@@ -2559,10 +2594,31 @@ export default function Dashboard() {
                   { label: 'Largest Win', value: money(stats.largestWin), color: '#10b981' },
                   { label: 'Largest Loss', value: money(stats.largestLoss), color: '#ef4444' },
                   {
+                    label: 'Time-Weighted Return',
+                    value: pct(rs.twr),
+                    color: rs.twr === null ? undefined : rs.twr >= 0 ? '#10b981' : '#ef4444',
+                    hint: 'Return over the snapshot window with deposits removed (chain-linked sub-period returns)',
+                  },
+                  {
+                    label: 'Annualised Return',
+                    value: pct(rs.annualizedReturn),
+                    hint: 'Time-weighted return per year; shown once there are 30+ days of history',
+                  },
+                  {
+                    label: 'Volatility (ann.)',
+                    value: rs.volatility === null ? '—' : (rs.volatility * 100).toFixed(1) + '%',
+                    hint: `Std. dev. of daily returns × √252 (${rs.days} days; needs 10+)`,
+                  },
+                  {
+                    label: 'Sharpe / Sortino',
+                    value: `${ratio(rs.sharpe)} / ${ratio(rs.sortino)}`,
+                    hint: 'Annualised, risk-free rate 0%. Sortino only penalises downside days. Needs 10+ days of snapshots',
+                  },
+                  {
                     label: 'Max Drawdown',
-                    value: portfolioSnapshots.length < 2 ? '—' : `-${(dd.maxDrawdown * 100).toFixed(2)}%`,
+                    value: portfolioSnapshots.length < 2 ? '—' : `-${(rs.maxDrawdown * 100).toFixed(2)}%`,
                     color: '#ef4444',
-                    hint: 'Largest peak-to-trough fall in portfolio value (from snapshots)',
+                    hint: 'Largest peak-to-trough fall of the time-weighted growth index (deposits excluded)',
                   },
                   {
                     label: 'Current Drawdown',
