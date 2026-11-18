@@ -8,9 +8,10 @@ import PortfolioComposition from '../../components/PortfolioComposition'
 import { computeHolding, heldTickers, planOrderExecutions, lotsAfterSell, orderPlacementError } from '../../lib/portfolio'
 import { computeTradeStats, computeDrawdown, computeReturnStats, type CashFlow } from '../../lib/metrics'
 import { DEFAULT_COSTS, buyFill, sellFill } from '../../lib/costs'
-import { getMarketSession, nyDateTime, shouldTakeValuationSnapshot } from '../../lib/market'
+import { getMarketSession, nyDateTime, sessionCloseMinutes, shouldTakeValuationSnapshot } from '../../lib/market'
 import { fetchPrices } from '../../lib/quotes'
 import { computeBenchmarkStats, fetchDailyBars, type Bar } from '../../lib/benchmark'
+import { barTriggeredFill, sortForReplay, type BarFill } from '../../lib/fills'
 
 // How many of the most recent portfolio snapshots to load for charts/metrics.
 const SNAPSHOT_LIMIT = 500
@@ -19,21 +20,29 @@ const SNAPSHOT_LIMIT = 500
 // in localStorage per New York day so this costs one API credit per day.
 const BENCHMARK = 'SPY'
 
-async function loadBenchmarkBars(): Promise<Bar[]> {
-  const key = `benchmark_bars_${BENCHMARK}`
-  const today = nyDateTime(new Date()).ymd
+// Daily bars, cached per symbol and New York day (and per session state, so
+// bars fetched mid-session are refetched once today's bar is final).
+async function loadDailyBars(symbol: string, outputsize = 500): Promise<Bar[]> {
+  const key = `daily_bars_${symbol}`
+  const { ymd: today, minutes } = nyDateTime(new Date())
+  const stamp = `${today}:${minutes >= sessionCloseMinutes(today) ? 'closed' : 'open'}`
   try {
     const cached = JSON.parse(localStorage.getItem(key) || 'null')
-    if (cached?.day === today && Array.isArray(cached.bars) && cached.bars.length) return cached.bars
+    if (cached?.stamp === stamp && cached.size >= outputsize && Array.isArray(cached.bars)) return cached.bars
   } catch { /* ignore a corrupt cache */ }
-  const { bars, error } = await fetchDailyBars(BENCHMARK, process.env.NEXT_PUBLIC_TWELVE_DATA_KEY)
+  const { bars, error } = await fetchDailyBars(symbol, process.env.NEXT_PUBLIC_TWELVE_DATA_KEY, { outputsize })
   if (error) {
-    console.error('Benchmark fetch error:', error)
+    console.error(`Daily bars fetch error (${symbol}):`, error)
     return []
   }
-  localStorage.setItem(key, JSON.stringify({ day: today, bars }))
+  localStorage.setItem(key, JSON.stringify({ stamp, size: outputsize, bars }))
   return bars
 }
+
+const loadBenchmarkBars = () => loadDailyBars(BENCHMARK, 500)
+
+// Resting orders are replayed against this many recent daily bars.
+const ORDER_REPLAY_BARS = 30
 
 // Helper function to format currency with commas
 function formatCurrency(amount: number): string {
@@ -412,11 +421,28 @@ export default function Dashboard() {
   async function checkAndExecuteOrders(prices: Record<string, number> = livePrices) {
     if (pendingOrders.length === 0 || !portfolio) return
 
-    // Oldest orders first, so earlier orders get priority on cash/shares
-    const ordered = [...pendingOrders].sort(
-      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
-    const plan = planOrderExecutions(ordered, prices, Number(portfolio.cash), trades, DEFAULT_COSTS)
+    // Orders placed before today may have been triggered by a completed
+    // session while nobody was refreshing; replay daily bars for those
+    // (cached per day, one API credit per ticker).
+    const today = nyDateTime(new Date()).ymd
+    const replayTickers = [...new Set(pendingOrders
+      .filter((o: any) => nyDateTime(new Date(o.created_at)).ymd < today)
+      .map((o: any) => o.ticker as string))]
+    const barFills: Record<string, BarFill> = {}
+    for (const tk of replayTickers) {
+      const bars = await loadDailyBars(tk, ORDER_REPLAY_BARS)
+      for (const o of pendingOrders.filter((p: any) => p.ticker === tk)) {
+        const f = barTriggeredFill(o, bars)
+        if (f) barFills[o.id] = f
+      }
+    }
+    const overrides = Object.fromEntries(Object.entries(barFills).map(([id, f]) => [id, f.price]))
+    const filledOn = (id: string) => (barFills[id] ? ` (price reached in the ${barFills[id].date} session)` : '')
+
+    // Fills in time order: bar-triggered ones by date, then oldest first,
+    // so earlier orders get priority on cash/shares.
+    const ordered = sortForReplay(pendingOrders, barFills)
+    const plan = planOrderExecutions(ordered, prices, Number(portfolio.cash), trades, DEFAULT_COSTS, overrides)
     if (plan.executions.length === 0 && plan.cancellations.length === 0) return
 
     const messages: string[] = []
@@ -440,7 +466,7 @@ export default function Dashboard() {
           total_value: ex.cost,
           profit_loss: null
         })
-        messages.push(`🎯 Limit buy executed: Bought ${ex.shares.toFixed(4)} ${ex.ticker} at $${formatCurrency(ex.price)}`)
+        messages.push(`🎯 Limit buy executed: Bought ${ex.shares.toFixed(4)} ${ex.ticker} at $${formatCurrency(ex.price)}${filledOn(ex.order.id)}`)
       } else {
         // Replace the position's lots with a single remaining lot at the
         // unchanged average cost (supports partial sells).
@@ -464,7 +490,7 @@ export default function Dashboard() {
           profit_loss: ex.profitLoss
         })
         const orderName = ex.order.order_type === 'STOP_LOSS' ? 'Stop-loss' : 'Limit sell'
-        messages.push(`🎯 ${orderName} executed: Sold ${ex.shares.toFixed(4)} ${ex.ticker} at $${formatCurrency(ex.price)}`)
+        messages.push(`🎯 ${orderName} executed: Sold ${ex.shares.toFixed(4)} ${ex.ticker} at $${formatCurrency(ex.price)}${filledOn(ex.order.id)}`)
       }
 
       await supabase
