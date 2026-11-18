@@ -7,10 +7,20 @@ import StockPerformanceChart from '../../components/StockPerformanceChart'
 import PortfolioComposition from '../../components/PortfolioComposition'
 import { computeHolding, heldTickers, planOrderExecutions } from '../../lib/portfolio'
 import { computeTradeStats, computeDrawdown } from '../../lib/metrics'
+import { getMarketSession } from '../../lib/market'
 
 // Helper function to format currency with commas
 function formatCurrency(amount: number): string {
   return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+// Outside regular hours the feed returns the last trade price; a real
+// broker would queue a market order for the next open instead.
+function marketClosedNote(): string {
+  const session = getMarketSession()
+  return session === 'open'
+    ? ''
+    : ` (Note: US market is ${session === 'closed' ? 'closed' : 'in ' + session}; filled at the last traded price, a real market order would wait for the next open.)`
 }
 
 // Helper function to group trades by time period
@@ -638,7 +648,7 @@ export default function Dashboard() {
     setTrades(prev => [...prev, newLot])
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
     setBuyAmount('')
-    setMessage(`✅ Bought ${shares.toFixed(4)} shares of ${selectedStock.ticker} for $${formatCurrency(dollars)}!`)
+    setMessage(`✅ Bought ${shares.toFixed(4)} shares of ${selectedStock.ticker} for $${formatCurrency(dollars)}!${marketClosedNote()}`)
 
     // Save portfolio snapshot with the post-trade state
     savePortfolioSnapshot({
@@ -685,7 +695,7 @@ export default function Dashboard() {
     setTrades(prev => prev.filter(tr => tr.ticker !== ticker))
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
     if (selectedStock?.ticker === ticker) setSelectedStock(null)
-    setMessage(`✅ Sold all ${ticker} for $${formatCurrency(value)}! P&L: ${profitLoss >= 0 ? '+' : '-'}$${formatCurrency(Math.abs(profitLoss))}`)
+    setMessage(`✅ Sold all ${ticker} for $${formatCurrency(value)}! P&L: ${profitLoss >= 0 ? '+' : '-'}$${formatCurrency(Math.abs(profitLoss))}${marketClosedNote()}`)
 
     // Save portfolio snapshot with the post-trade state
     savePortfolioSnapshot({
