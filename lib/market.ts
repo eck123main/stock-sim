@@ -3,13 +3,21 @@
 // trade, so a "market" order in the simulator fills at a stale price, while
 // a real broker would queue it for the next open (often at a gapped price).
 
-// NYSE full-day holidays. Early closes (13:00) are not modelled.
+// NYSE full-day holidays (dates re-derived in round 2: Good Friday from the
+// Easter date; Saturday holidays observed Friday, Sunday ones Monday).
 // Source: https://www.nyse.com/markets/hours-calendars
 const NYSE_HOLIDAYS = new Set([
   '2026-01-01', '2026-01-19', '2026-02-16', '2026-04-03', '2026-05-25',
   '2026-06-19', '2026-07-03', '2026-09-07', '2026-11-26', '2026-12-25',
   '2027-01-01', '2027-01-18', '2027-02-15', '2027-03-26', '2027-05-31',
   '2027-06-18', '2027-07-05', '2027-09-06', '2027-11-25', '2027-12-24',
+])
+
+// Early-close days: the regular session ends at 13:00 ET (extended hours at
+// 17:00). Day after Thanksgiving and Christmas Eve when it's a trading day.
+const NYSE_EARLY_CLOSES = new Set([
+  '2026-11-27', '2026-12-24',
+  '2027-11-26',
 ])
 
 export type MarketSession = 'open' | 'pre-market' | 'after-hours' | 'closed'
@@ -33,9 +41,12 @@ function nyParts(date: Date) {
 export function getMarketSession(date: Date = new Date()): MarketSession {
   const { ymd, weekday, minutes } = nyParts(date)
   if (weekday === 'Sat' || weekday === 'Sun' || NYSE_HOLIDAYS.has(ymd)) return 'closed'
-  if (minutes >= 9 * 60 + 30 && minutes < 16 * 60) return 'open'
+  const early = NYSE_EARLY_CLOSES.has(ymd)
+  const close = early ? 13 * 60 : 16 * 60
+  const extendedEnd = early ? 17 * 60 : 20 * 60
+  if (minutes >= 9 * 60 + 30 && minutes < close) return 'open'
   if (minutes >= 4 * 60 && minutes < 9 * 60 + 30) return 'pre-market'
-  if (minutes >= 16 * 60 && minutes < 20 * 60) return 'after-hours'
+  if (minutes >= close && minutes < extendedEnd) return 'after-hours'
   return 'closed'
 }
 

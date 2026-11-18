@@ -2,6 +2,16 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { getMarketSession, isMarketOpen } from '../lib/market.ts'
 
+test('early close: day after Thanksgiving ends at 13:00 ET', () => {
+  // Fri 2026-11-27 12:59 EST = 17:59 UTC -> open; 13:00 -> after-hours
+  assert.equal(getMarketSession(new Date('2026-11-27T17:59:00Z')), 'open')
+  assert.equal(getMarketSession(new Date('2026-11-27T18:00:00Z')), 'after-hours')
+  // extended session ends at 17:00 ET on early-close days
+  assert.equal(getMarketSession(new Date('2026-11-27T22:00:00Z')), 'closed')
+  // Thanksgiving itself is closed
+  assert.equal(getMarketSession(new Date('2026-11-26T16:00:00Z')), 'closed')
+})
+
 test('regular session on a normal weekday (EST and EDT)', () => {
   // Wed 2026-11-18 10:00 EST = 15:00 UTC
   assert.equal(getMarketSession(new Date('2026-11-18T15:00:00Z')), 'open')
