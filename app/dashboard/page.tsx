@@ -8,11 +8,32 @@ import PortfolioComposition from '../../components/PortfolioComposition'
 import { computeHolding, heldTickers, planOrderExecutions, lotsAfterSell, orderPlacementError } from '../../lib/portfolio'
 import { computeTradeStats, computeDrawdown, computeReturnStats, type CashFlow } from '../../lib/metrics'
 import { DEFAULT_COSTS, buyFill, sellFill } from '../../lib/costs'
-import { getMarketSession } from '../../lib/market'
+import { getMarketSession, nyDateTime, shouldTakeValuationSnapshot } from '../../lib/market'
 import { fetchPrices } from '../../lib/quotes'
+import { computeBenchmarkStats, fetchDailyBars, type Bar } from '../../lib/benchmark'
 
 // How many of the most recent portfolio snapshots to load for charts/metrics.
 const SNAPSHOT_LIMIT = 500
+
+// Benchmark for relative performance (S&P 500 ETF). Daily closes are cached
+// in localStorage per New York day so this costs one API credit per day.
+const BENCHMARK = 'SPY'
+
+async function loadBenchmarkBars(): Promise<Bar[]> {
+  const key = `benchmark_bars_${BENCHMARK}`
+  const today = nyDateTime(new Date()).ymd
+  try {
+    const cached = JSON.parse(localStorage.getItem(key) || 'null')
+    if (cached?.day === today && Array.isArray(cached.bars) && cached.bars.length) return cached.bars
+  } catch { /* ignore a corrupt cache */ }
+  const { bars, error } = await fetchDailyBars(BENCHMARK, process.env.NEXT_PUBLIC_TWELVE_DATA_KEY)
+  if (error) {
+    console.error('Benchmark fetch error:', error)
+    return []
+  }
+  localStorage.setItem(key, JSON.stringify({ day: today, bars }))
+  return bars
+}
 
 // Helper function to format currency with commas
 function formatCurrency(amount: number): string {
@@ -64,6 +85,7 @@ export default function Dashboard() {
   const [trades, setTrades] = useState<any[]>([])
   const [tradeHistory, setTradeHistory] = useState<any[]>([])
   const [cashFlows, setCashFlows] = useState<CashFlow[]>([])
+  const [benchmarkBars, setBenchmarkBars] = useState<Bar[]>([])
   const [sellShares, setSellShares] = useState('')
   const [loading, setLoading] = useState(true)
   const [selectedStock, setSelectedStock] = useState<any>(null)
@@ -190,6 +212,9 @@ export default function Dashboard() {
       if (cachedPrices) {
         setLivePrices(JSON.parse(cachedPrices))
       }
+
+      // Benchmark closes load in the background; stats show "—" until then.
+      loadBenchmarkBars().then(setBenchmarkBars)
     }
     load()
   }, [])
@@ -622,6 +647,17 @@ export default function Dashboard() {
     setMessage(failed.length
       ? `⚠️ Prices refreshed, but could not fetch: ${failed.join(', ')}`
       : '✅ Prices refreshed successfully!')
+
+    // Record one mark-to-market snapshot per New York day so returns and risk
+    // metrics have a daily series even when the user doesn't trade. Done
+    // before order execution, while `trades`/`portfolio` still describe the
+    // current state (executions save their own post-trade snapshots).
+    const held = heldTickers(trades)
+    const lastSnapshot = portfolioSnapshots[portfolioSnapshots.length - 1]
+    if (held.length > 0 && shouldTakeValuationSnapshot(
+      lastSnapshot?.created_at, new Date(), held.every(tk => fresh[tk] > 0))) {
+      await savePortfolioSnapshot({ prices })
+    }
 
     // Check pending orders only against prices fetched just now, never
     // against stale cached prices.
@@ -2624,6 +2660,7 @@ export default function Dashboard() {
                 const stats = computeTradeStats(tradeHistory)
                 const dd = computeDrawdown(portfolioSnapshots)
                 const rs = computeReturnStats(portfolioSnapshots, cashFlows)
+                const bm = computeBenchmarkStats(portfolioSnapshots, cashFlows, benchmarkBars)
                 const pct = (v: number | null) =>
                   v === null ? '—' : `${v >= 0 ? '+' : '-'}${(Math.abs(v) * 100).toFixed(2)}%`
                 const ratio = (v: number | null) => (v === null ? '—' : v.toFixed(2))
@@ -2671,6 +2708,28 @@ export default function Dashboard() {
                     label: 'Sharpe / Sortino',
                     value: `${ratio(rs.sharpe)} / ${ratio(rs.sortino)}`,
                     hint: 'Annualised, risk-free rate 0%. Sortino only penalises downside days. Needs 10+ days of snapshots',
+                  },
+                  {
+                    label: `You vs ${BENCHMARK}`,
+                    value: `${pct(bm.portfolioReturn)} / ${pct(bm.benchmarkReturn)}`,
+                    hint: `Time-weighted return vs ${BENCHMARK} price return over the same days (${BENCHMARK} uses its last close at or before each snapshot)`,
+                  },
+                  {
+                    label: `Excess Return vs ${BENCHMARK}`,
+                    value: pct(bm.excessReturn),
+                    color: bm.excessReturn === null ? undefined : bm.excessReturn >= 0 ? '#10b981' : '#ef4444',
+                    hint: 'Your return minus the benchmark return. Positive means you beat buying and holding the index',
+                  },
+                  {
+                    label: 'Beta / Correlation',
+                    value: `${ratio(bm.beta)} / ${ratio(bm.correlation)}`,
+                    hint: `Sensitivity to ${BENCHMARK} moves (1 = moves with the market) and how closely you track it. Needs 10+ days of snapshots (${bm.periods} so far)`,
+                  },
+                  {
+                    label: 'Alpha (ann.)',
+                    value: pct(bm.alpha),
+                    color: bm.alpha === null ? undefined : bm.alpha >= 0 ? '#10b981' : '#ef4444',
+                    hint: 'Annualised return not explained by market exposure (Jensen\'s alpha, risk-free 0%). Needs 30+ days',
                   },
                   {
                     label: 'Max Drawdown',
