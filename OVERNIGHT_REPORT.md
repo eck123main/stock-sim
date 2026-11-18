@@ -134,3 +134,111 @@ Claude as the README says). Nearly all logic was inline in
 - `reconstructPriceTimeline` builds indicators from the user's own trade
   prices, which isn't a real price series. Use Twelve Data `/time_series`.
 - Split `app/dashboard/page.tsx` into components.
+
+## Round 2 — 2026-11-18 (same branch)
+
+The tree was clean at the start, with no unfinished work. Seven commits,
+one per change. Tests went from 22 to 44 (new files `costs`, `returns` and
+`quotes`, plus additions to the `market` and `portfolio` tests), and all
+pass.
+
+### What I changed and why
+1. **Bug: charts and metrics stopped updating after 100 snapshots**
+   (`f85e9ae`). Snapshots were loaded with ascending order and
+   `.limit(100)`, which returns the *oldest* 100 rows. Once a user had more
+   than 100, the portfolio chart and drawdown froze in the past. The app now
+   fetches the newest `SNAPSHOT_LIMIT` (500) rows and reverses them into
+   time order.
+2. **Bug: market buys filled at a stale price** (same commit).
+   `handleBuy` used the price from when the stock was *searched*, which
+   could be hours old. It now fetches a fresh quote, as sells already did
+   after round 1.
+3. **Transaction costs (`lib/costs.ts`)** (`7924675`). Every fill used to
+   be at the raw last price, so round trips were free. The new model:
+   - Half-spread slippage: buys fill at quote × (1 + bps), sells at
+     quote × (1 − bps). The default is 2 bps with zero commission, roughly a
+     commission-free broker trading liquid large caps. Flat and bps
+     commissions are supported.
+   - Limit orders never fill worse than their limit, even after slippage.
+     Stops fill like market orders and can slip below the stop.
+   - Cost basis includes the costs, and realised P&L is net of them.
+   - It is used by market buys and sells and by `planOrderExecutions`. The
+     planner's new `costs` parameter defaults to zero, so earlier tests are
+     unchanged.
+4. **Returns no longer count deposits as profit (`computeReturnStats`
+   in `lib/metrics.ts`)** (`c1f8da4`).
+   - Time-weighted return, chain-linked across snapshots:
+     r_i = (V_i − CF_i)/V_{i−1} − 1.
+   - Annualised return, shown once there are 30+ days of history.
+   - Annualised volatility, Sharpe and Sortino, from returns compounded to
+     one per day. They need 10+ days, otherwise they show "—".
+   - Max drawdown is now measured on the TWR growth index, so a withdrawal
+     doesn't look like a loss.
+   - Deposits are now saved as `action: 'DEPOSIT'` rows in `trade_history`,
+     with a snapshot taken right after. The dashboard keeps these rows out
+     of the trade list and trade statistics. The deposit handler also now
+     checks the `portfolios` update for errors.
+5. **Partial manual sells** (`6e9e1fc`). There is a "shares to sell" input
+   next to "Sell All". The remaining shares are kept as one lot at the
+   unchanged average cost, using round 1's `lotsAfterSell`.
+6. **Batched price fetching (`lib/quotes.ts`)** (`7c9abfd`).
+   - A refresh used to make one request per ticker with 500 ms sleeps,
+     then the alert check fetched every alert ticker again. Now held,
+     pending-order and alert tickers go out in one `/price` request per 8
+     symbols, and the alert check reuses those prices.
+   - **Bug fixed in `getMultipleStocks`**: for a single symbol Twelve Data
+     returns a flat `{price}`, not `{AAPL: {price}}`, so `getStockPrice`
+     always reported an error.
+7. **NYSE early closes** (`6894f36`). 2026-11-27, 2026-12-24 and
+   2027-11-26 now close at 13:00 ET, with extended hours ending at 17:00.
+   I re-derived round 1's holiday list (Good Friday from the Easter date,
+   weekend observance rules) and it is correct.
+8. **Order entry validation** (`d299589`). A stop-loss at or above the
+   current price is now rejected; it used to trigger on the next refresh.
+   Brokers reject these too.
+
+### Research
+- Time-weighted return: split the period at each cash flow and
+  geometrically link the sub-period returns.
+  - https://www.bankrate.com/investing/what-is-time-weighted-return-how-to-calculate/
+  - https://www.moonfare.com/glossary/time-weighted-return-twr
+  - https://www.fundmanagersoftware.com/help/yields_twr.html
+  - https://metricgate.com/docs/time-weighted-return/
+- Slippage and commission modelling: half-spread fills, bps slippage of
+  about 1–5 bps for liquid large caps, and per-share or bps commissions.
+  - https://rustybt.readthedocs.io/en/latest/api/order-management/transaction-costs/slippage-models/
+  - https://qf-lib.readthedocs.io/en/latest/tutorials/customize_your_backtest.html
+  - https://www.mql5.com/en/blogs/post/775565 (fixed spreads understate
+    costs at the open, the close and around news)
+
+### What I could NOT run or test
+- **`tsc`, lint and build were blocked again** by the session's
+  permission settings, and so were `sed` and heredocs. The dashboard edits
+  were checked only by reading the code. **Run `npm run lint && npm run
+  build` before merging.**
+- **Database schema risk:** there is no schema in the repo. If
+  `trade_history.action` has a CHECK constraint or an enum allowing only
+  `BUY`/`SELL`, the `DEPOSIT` insert will fail. The deposit itself still
+  succeeds, the error is logged to the console, and TWR then treats the
+  deposit as a gain, as before. If so, widen the constraint, or add a
+  `cash_flows` table and change `applyHistory`/`handleDeposit`.
+- I couldn't test against a real Supabase or Twelve Data instance. Batch
+  parsing follows Twelve Data's documented response shapes, but I didn't
+  try it against the live API.
+- Deposits made before this change have no cash-flow rows, so the TWR of
+  existing accounts still counts those deposits as gains.
+
+### Ideas for next time
+- Atomic trades via a Postgres RPC with RLS (still the biggest integrity
+  gap, carried over from round 1).
+- A benchmark comparison, e.g. TWR vs SPY over the same window, using
+  Twelve Data `/time_series` daily closes. That would also give beta and
+  alpha.
+- Snapshots only happen on trades and deposits, so daily risk metrics are
+  sparse for inactive users. A daily snapshot (cron or on login) would
+  make Sharpe and volatility meaningful.
+- Let users set the cost settings, or make slippage depend on the stock
+  (wider for small caps and low-priced stocks).
+- Queue market orders placed outside regular hours for the next open.
+- Holidays and early closes are hard-coded through 2027; extend the list
+  or compute it.
