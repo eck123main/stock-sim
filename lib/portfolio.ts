@@ -85,6 +85,20 @@ export function isTriggered(order: PendingOrder, price: number): boolean {
 }
 
 /**
+ * Reject orders a broker would refuse at entry. A sell stop at or above the
+ * current price would trigger immediately, so brokers reject it (use a
+ * market or limit sell instead). Marketable limit orders are allowed; they
+ * simply fill on the next price check.
+ */
+export function orderPlacementError(type: OrderType, target: number, currentPrice: number | null | undefined): string | null {
+  if (!(target > 0)) return 'Please enter a valid price'
+  if (type === 'STOP_LOSS' && currentPrice && target >= currentPrice) {
+    return `Stop price must be below the current price ($${currentPrice.toFixed(2)}), otherwise it would trigger immediately`
+  }
+  return null
+}
+
+/**
  * Decide which pending orders fill at the given prices. State (cash and
  * positions) is threaded through sequentially so that several fills in one
  * pass don't all start from the same stale cash balance, a buy can't spend

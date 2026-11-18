@@ -1,8 +1,19 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { computeHolding, planOrderExecutions, lotsAfterSell, isTriggered, toNum, type PendingOrder } from '../lib/portfolio.ts'
+import { computeHolding, planOrderExecutions, lotsAfterSell, isTriggered, toNum, orderPlacementError, type PendingOrder } from '../lib/portfolio.ts'
 
 const close = (a: number, b: number, eps = 1e-9) => Math.abs(a - b) < eps
+
+test('stop-loss at or above the current price is rejected at entry', () => {
+  assert.match(orderPlacementError('STOP_LOSS', 100, 100)!, /below the current price/)
+  assert.match(orderPlacementError('STOP_LOSS', 105, 100)!, /below/)
+  assert.equal(orderPlacementError('STOP_LOSS', 95, 100), null)
+  // marketable limits are fine; unknown current price can't be checked
+  assert.equal(orderPlacementError('LIMIT_BUY', 105, 100), null)
+  assert.equal(orderPlacementError('LIMIT_SELL', 95, 100), null)
+  assert.equal(orderPlacementError('STOP_LOSS', 95, null), null)
+  assert.ok(orderPlacementError('LIMIT_BUY', 0, 100))
+})
 
 test('average price is share-weighted, not a plain mean of lot prices', () => {
   // $1000 at $100 (10 sh) + $100 at $200 (0.5 sh)

@@ -5,7 +5,7 @@ import { searchStock } from '../../lib/stocks'
 import PortfolioChart from '../../components/PortfolioChart'
 import StockPerformanceChart from '../../components/StockPerformanceChart'
 import PortfolioComposition from '../../components/PortfolioComposition'
-import { computeHolding, heldTickers, planOrderExecutions, lotsAfterSell } from '../../lib/portfolio'
+import { computeHolding, heldTickers, planOrderExecutions, lotsAfterSell, orderPlacementError } from '../../lib/portfolio'
 import { computeTradeStats, computeDrawdown, computeReturnStats, type CashFlow } from '../../lib/metrics'
 import { DEFAULT_COSTS, buyFill, sellFill } from '../../lib/costs'
 import { getMarketSession } from '../../lib/market'
@@ -335,6 +335,12 @@ export default function Dashboard() {
       const holding = getHolding(selectedStock.ticker)
       if (!holding) {
         setMessage(`You don't own any ${selectedStock.ticker}`)
+        return
+      }
+      const placementError = orderPlacementError(
+        orderType, targetPrice, livePrices[selectedStock.ticker] ?? selectedStock.price)
+      if (placementError) {
+        setMessage(placementError)
         return
       }
 
