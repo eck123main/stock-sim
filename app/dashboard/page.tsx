@@ -9,6 +9,9 @@ import { computeHolding, heldTickers, planOrderExecutions } from '../../lib/port
 import { computeTradeStats, computeDrawdown } from '../../lib/metrics'
 import { getMarketSession } from '../../lib/market'
 
+// How many of the most recent portfolio snapshots to load for charts/metrics.
+const SNAPSHOT_LIMIT = 500
+
 // Helper function to format currency with commas
 function formatCurrency(amount: number): string {
   return amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -136,14 +139,8 @@ export default function Dashboard() {
       }
       setTradeHistory(historyData || [])
 
-      // Fetch portfolio snapshots
-      const { data: snapshotsData } = await supabase
-        .from('portfolio_snapshots')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: true })
-        .limit(100)
-      setPortfolioSnapshots(snapshotsData || [])
+      // Fetch portfolio snapshots (most recent ones; see fetchRecentSnapshots)
+      setPortfolioSnapshots(await fetchRecentSnapshots(user.id))
 
       // Fetch user watchlist
       const { data: watchlistData } = await supabase
@@ -235,13 +232,20 @@ export default function Dashboard() {
     })
 
     // Fetch updated snapshots
-    const { data: snapshotsData } = await supabase
+    setPortfolioSnapshots(await fetchRecentSnapshots(user.id))
+  }
+
+  // Newest SNAPSHOT_LIMIT snapshots in chronological order. Ordering
+  // ascending with a limit (as before) returned the *oldest* rows, so once a
+  // user had more than the limit, charts and drawdown stopped updating.
+  async function fetchRecentSnapshots(userId: string) {
+    const { data } = await supabase
       .from('portfolio_snapshots')
       .select('*')
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: true })
-      .limit(100)
-    setPortfolioSnapshots(snapshotsData || [])
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(SNAPSHOT_LIMIT)
+    return (data || []).reverse()
   }
 
   async function addToWatchlist(ticker: string) {
@@ -618,15 +622,22 @@ export default function Dashboard() {
     if (!selectedStock.price || selectedStock.price === 0) return setMessage('Stock price not loaded yet!')
     const dollars = parseFloat(buyAmount)
     if (isNaN(dollars) || dollars <= 0) return setMessage('Enter a valid amount')
-    if (dollars > portfolio.cash) return setMessage('Not enough cash!')
+    if (dollars > Number(portfolio.cash)) return setMessage('Not enough cash!')
 
-    const shares = dollars / selectedStock.price
+    // Fill at a freshly fetched quote, not the price from when the stock was
+    // searched (which may be minutes or hours old).
+    const quote = await searchStock(selectedStock.ticker)
+    const price = !quote.error && quote.price ? quote.price : selectedStock.price
+    if (price !== selectedStock.price) setSelectedStock({ ...selectedStock, price })
+    setLivePrices(prev => ({ ...prev, [selectedStock.ticker]: price }))
+
+    const shares = dollars / price
     const newCash = Number(portfolio.cash) - dollars
 
     await supabase.from('trades').insert({
       user_id: user.id, ticker: selectedStock.ticker,
       company_name: selectedStock.ticker, shares,
-      price_at_purchase: selectedStock.price,
+      price_at_purchase: price,
     })
 
     // Log to history
@@ -635,7 +646,7 @@ export default function Dashboard() {
       ticker: selectedStock.ticker,
       action: 'BUY',
       shares,
-      price: selectedStock.price,
+      price,
       total_value: dollars,
       profit_loss: null,
     }
@@ -643,7 +654,7 @@ export default function Dashboard() {
 
     await supabase.from('portfolios').update({ cash: newCash }).eq('id', user.id)
 
-    const newLot = { ticker: selectedStock.ticker, shares, price_at_purchase: selectedStock.price }
+    const newLot = { ticker: selectedStock.ticker, shares, price_at_purchase: price }
     setPortfolio({ ...portfolio, cash: newCash })
     setTrades(prev => [...prev, newLot])
     setTradeHistory(prev => [{ ...historyEntry, created_at: new Date().toISOString() }, ...prev])
@@ -654,7 +665,7 @@ export default function Dashboard() {
     savePortfolioSnapshot({
       cash: newCash,
       lots: [...trades, newLot],
-      prices: { ...livePrices, [selectedStock.ticker]: selectedStock.price },
+      prices: { ...livePrices, [selectedStock.ticker]: price },
     })
   }
 
